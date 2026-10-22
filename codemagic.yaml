@@ -1,0 +1,29 @@
+workflows:
+  android-test:
+    name: Smart Archiwum AI - Android APK
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Utworz projekt Android
+        script: |
+          set -eu
+          flutter create --platforms=android --org=pl.rentside --project-name=smart_archiwum_ai /tmp/smartarchiwum_android
+          cp -R /tmp/smartarchiwum_android/android .
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          p.write_text(p.read_text().replace('android:label="smart_archiwum_ai"', 'android:label="Smart Archiwum AI"'))
+          PY
+      - name: Zaleznosci
+        script: flutter pub get
+      - name: Analiza
+        script: flutter analyze
+      - name: Testy
+        script: flutter test
+      - name: Android APK debug
+        script: flutter build apk --debug
+    artifacts:
+      - build/app/outputs/flutter-apk/app-debug.apk
