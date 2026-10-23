@@ -295,11 +295,13 @@ class _ScanPageState extends State<ScanPage> {
           child: Column(children: [
             InkWell(onTap: preview,
               child: SizedBox(width: double.infinity, height: 350,
-                child: Image.memory(pages[selected].bytes,
+                child: Image.memory(pages[selected].displayed,
+                  key: ValueKey(pages[selected].displayed),
                   fit: BoxFit.contain))),
             Padding(padding: const EdgeInsets.all(12),
               child: Column(children: [
-                Text('Strona ' + (selected + 1).toString() +
+                Text((pages[selected].corrected == null ? 'Oryginał • ' : 'Po korekcie • ') +
+                  'Strona ' + (selected + 1).toString() +
                   ' z ' + pages.length.toString() + ' • ' +
                   pages[selected].width.toString() + '×' +
                   pages[selected].height.toString() + ' px • ' +
@@ -352,7 +354,8 @@ class _ScanPageState extends State<ScanPage> {
                       ? orange : Colors.grey.shade300,
                     width: i == selected ? 3 : 1),
                   borderRadius: BorderRadius.circular(8)),
-                child: Image.memory(pages[i].displayed, fit: BoxFit.cover)),
+                child: Image.memory(pages[i].displayed,
+                  key: ValueKey(pages[i].displayed), fit: BoxFit.cover)),
             ),
           )),
         const SizedBox(height: 12),
