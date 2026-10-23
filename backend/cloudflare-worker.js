@@ -2,7 +2,7 @@
 // Set GEMINI_API_KEY and APP_ACCESS_TOKEN as encrypted Worker secrets.
 // Never put either secret in GitHub or in the public Flutter application.
 const ORIGIN = 'https://radek2011.github.io';
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-3.5-flash-lite';
 const MAX_IMAGES = 5;
 const MAX_IMAGE_LENGTH = 1800000;
 
