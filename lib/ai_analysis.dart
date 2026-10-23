@@ -80,7 +80,22 @@ class AiAnalysis {
         body: jsonEncode({'images': images}),
       ).timeout(const Duration(seconds: 55));
       if (response.statusCode != 200) {
-        throw Exception('Błąd serwera: ' + response.statusCode.toString());
+        String detail = '';
+        try {
+          final payload = jsonDecode(response.body);
+          if (payload is Map<String, dynamic>) {
+            final provider = payload['providerStatus'];
+            final reason = payload['error'];
+            if (reason is String) detail = reason;
+            if (provider is int) {
+              detail += ' (Gemini HTTP ' + provider.toString() + ')';
+            }
+          }
+        } catch (_) {
+          // The Worker may return a non-JSON response.
+        }
+        throw Exception('Serwer HTTP ' + response.statusCode.toString() +
+            (detail.isEmpty ? '' : ': ' + detail));
       }
       final parsed = jsonDecode(response.body);
       if (parsed is! Map<String, dynamic>) {
@@ -129,6 +144,6 @@ class AiAnalysis {
 
   static void _notice(BuildContext context, String text) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)));
+      SnackBar(content: Text(text), duration: const Duration(seconds: 12)));
   }
 }
