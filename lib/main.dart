@@ -1,3 +1,4 @@
+import 'scan_page.dart';
 import 'package:flutter/material.dart';
 
 void main() => runApp(const SmartArchiveApp());
@@ -55,7 +56,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
       child: Column(children: [
         Expanded(child: IndexedStack(index: selected, children: [
           _home(),
-          _scan(),
+          const ScanPage(),
           _archive(),
           _settings(),
         ])),
