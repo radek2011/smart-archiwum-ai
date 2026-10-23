@@ -2,6 +2,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -111,6 +114,48 @@ class _ScanPageState extends State<ScanPage> {
     });
   }
 
+  void rotateSelected() {
+    if (busy || pages.isEmpty) return;
+    final original = img.decodeJpg(pages[selected].bytes);
+    if (original == null) {
+      message('Nie można obrócić tej strony.');
+      return;
+    }
+    final rotated = img.copyRotate(original, angle: 90);
+    final data = Uint8List.fromList(img.encodeJpg(rotated, quality: 88));
+    setState(() => pages[selected] =
+        _PagePhoto(data, rotated.width, rotated.height));
+  }
+
+  Future<void> exportPdf() async {
+    if (busy || pages.isEmpty) return;
+    setState(() { busy = true; progress = 'Tworzenie pliku PDF…'; });
+    try {
+      final document = pw.Document(compress: true);
+      for (final page in pages) {
+        final photo = pw.MemoryImage(page.bytes);
+        document.addPage(pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(16),
+          build: (context) => pw.Center(
+            child: pw.Image(photo, fit: pw.BoxFit.contain),
+          ),
+        ));
+      }
+      final bytes = await document.save();
+      if (!mounted) return;
+      final timestamp = DateTime.now().toIso8601String()
+          .substring(0, 19).replaceAll(':', '-');
+      await Printing.sharePdf(
+        bytes: bytes, filename: 'Smart_Archiwum_$timestamp.pdf');
+      if (mounted) message('PDF przygotowany. Zapisz go z menu telefonu.');
+    } catch (e) {
+      if (mounted) message('Nie udało się utworzyć PDF: $e');
+    } finally {
+      if (mounted) setState(() { busy = false; progress = ''; });
+    }
+  }
+
   void preview() {
     Navigator.push(context, MaterialPageRoute<void>(
       builder: (_) => Scaffold(
@@ -202,6 +247,9 @@ class _ScanPageState extends State<ScanPage> {
                   IconButton(tooltip: 'Przesuń wcześniej',
                     onPressed: selected > 0 ? () => move(-1) : null,
                     icon: const Icon(Icons.arrow_back)),
+                  IconButton(tooltip: 'Obróć o 90 stopni',
+                    onPressed: busy ? null : rotateSelected,
+                    icon: const Icon(Icons.rotate_right)),
                   IconButton(tooltip: 'Usuń',
                     onPressed: remove,
                     icon: const Icon(Icons.delete_outline, color: Colors.red)),
@@ -232,10 +280,19 @@ class _ScanPageState extends State<ScanPage> {
                 child: Image.memory(pages[i].bytes, fit: BoxFit.cover)),
             ),
           )),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          key: const Key('exportPdfButton'),
+          onPressed: busy ? null : exportPdf,
+          style: FilledButton.styleFrom(backgroundColor: navy,
+            padding: const EdgeInsets.symmetric(vertical: 16)),
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.2: skany są tylko w pamięci. '
+        const Text('Wersja 0.3: skany są tylko w pamięci. '
           'Odświeżenie lub zamknięcie strony usuwa je. '
-          'PDF, OCR i Drive dodamy później.',
+          'Zapisz wyeksportowany PDF na telefonie. '
+          'Automatyczne kadrowanie, OCR i Drive dodamy później.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
