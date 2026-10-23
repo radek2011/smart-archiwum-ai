@@ -9,7 +9,8 @@ void main() {
     expect(find.byKey(const Key('newScan')), findsOneWidget);
     await tester.tap(find.byKey(const Key('newScan')));
     await tester.pumpAndSettle();
-    expect(find.text('Zeskanuj dokument'), findsOneWidget);
+    expect(find.byKey(const Key('cameraButton')), findsOneWidget);
+    expect(find.byKey(const Key('galleryButton')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
