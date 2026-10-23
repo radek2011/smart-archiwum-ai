@@ -1,1 +1,5 @@
+# Konfiguracja analizy kodu Flutter
+analyzer:
+  errors:
+    unused_import: ignore
 
