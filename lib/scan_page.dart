@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'document_processor.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,8 @@ class ScanPage extends StatefulWidget {
 
 class _PagePhoto {
   const _PagePhoto(this.bytes, this.width, this.height);
+  Uint8List? corrected;
+  Uint8List get displayed => corrected ?? bytes;
   final Uint8List bytes;
   final int width;
   final int height;
@@ -114,9 +117,74 @@ class _ScanPageState extends State<ScanPage> {
     });
   }
 
+  Future<void> correctSelected() async {
+    if (busy || pages.isEmpty) return;
+    final originalPage = pages[selected];
+    setState(() {
+      busy = true;
+      progress = 'Wykrywanie kartki i prostowanie…';
+    });
+    try {
+      final result = deskewDocument(originalPage.bytes);
+      if (!mounted) return;
+      if (result == null) {
+        message('Nie wykryto pewnych krawędzi kartki. Zachowano oryginał. '
+          'Spróbuj fotografować na ciemnym, jednolitym tle.');
+        return;
+      }
+      final apply = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Porównaj skan z korektą'),
+          content: SizedBox(
+            width: 440,
+            child: ListView(shrinkWrap: true, children: [
+              const Text('Oryginał', style: TextStyle(
+                fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Image.memory(originalPage.bytes, height: 240,
+                fit: BoxFit.contain),
+              const SizedBox(height: 12),
+              const Text('Automatyczna korekta (wersja testowa)',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Image.memory(result, height: 240, fit: BoxFit.contain),
+              const SizedBox(height: 8),
+              const Text('Sprawdź, czy nie obcięto tekstu, podpisów lub pieczątek.',
+                style: TextStyle(fontSize: 12)),
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Zachowaj oryginał')),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Zastosuj korektę')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (apply == true && pages.contains(originalPage)) {
+        setState(() => originalPage.corrected = result);
+        message('Korekta zastosowana. Oryginał pozostał do przywrócenia.');
+      }
+    } catch (e) {
+      if (mounted) message('Korekta nie powiodła się: $e');
+    } finally {
+      if (mounted) setState(() { busy = false; progress = ''; });
+    }
+  }
+
+  void restoreOriginal() {
+    if (pages.isEmpty || busy) return;
+    setState(() => pages[selected].corrected = null);
+    message('Przywrócono oryginalny skan.');
+  }
+
   void rotateSelected() {
     if (busy || pages.isEmpty) return;
-    final original = img.decodeJpg(pages[selected].bytes);
+    final original = img.decodeJpg(pages[selected].displayed);
     if (original == null) {
       message('Nie można obrócić tej strony.');
       return;
@@ -133,7 +201,7 @@ class _ScanPageState extends State<ScanPage> {
     try {
       final document = pw.Document(compress: true);
       for (final page in pages) {
-        final photo = pw.MemoryImage(page.bytes);
+        final photo = pw.MemoryImage(page.displayed);
         document.addPage(pw.Page(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(16),
@@ -163,7 +231,7 @@ class _ScanPageState extends State<ScanPage> {
         body: InteractiveViewer(
           minScale: 0.7, maxScale: 6,
           child: Center(child: Image.memory(
-            pages[selected].bytes, fit: BoxFit.contain)),
+            pages[selected].displayed, fit: BoxFit.contain)),
         ),
       ),
     ));
@@ -171,7 +239,7 @@ class _ScanPageState extends State<ScanPage> {
 
   @override
   Widget build(BuildContext context) {
-    final total = pages.fold<int>(0, (sum, item) => sum + item.bytes.length);
+    final total = pages.fold<int>(0, (sum, item) => sum + item.displayed.length);
     return ListView(padding: const EdgeInsets.all(18), children: [
       const Text('Nowy skan', style: TextStyle(fontSize: 25,
         fontWeight: FontWeight.w800, color: navy)),
@@ -235,7 +303,7 @@ class _ScanPageState extends State<ScanPage> {
                   ' z ' + pages.length.toString() + ' • ' +
                   pages[selected].width.toString() + '×' +
                   pages[selected].height.toString() + ' px • ' +
-                  size(pages[selected].bytes.length),
+                  size(pages[selected].displayed.length),
                   textAlign: TextAlign.center),
                 const Text('Dotknij zdjęcia, aby powiększyć',
                   style: TextStyle(color: Colors.black54, fontSize: 12)),
@@ -247,6 +315,13 @@ class _ScanPageState extends State<ScanPage> {
                   IconButton(tooltip: 'Przesuń wcześniej',
                     onPressed: selected > 0 ? () => move(-1) : null,
                     icon: const Icon(Icons.arrow_back)),
+                  IconButton(tooltip: 'Automatyczna korekta',
+                    onPressed: busy ? null : correctSelected,
+                    icon: const Icon(Icons.auto_fix_high)),
+                  IconButton(tooltip: 'Przywróć oryginał',
+                    onPressed: !busy && pages[selected].corrected != null
+                      ? restoreOriginal : null,
+                    icon: const Icon(Icons.settings_backup_restore)),
                   IconButton(tooltip: 'Obróć o 90 stopni',
                     onPressed: busy ? null : rotateSelected,
                     icon: const Icon(Icons.rotate_right)),
@@ -277,7 +352,7 @@ class _ScanPageState extends State<ScanPage> {
                       ? orange : Colors.grey.shade300,
                     width: i == selected ? 3 : 1),
                   borderRadius: BorderRadius.circular(8)),
-                child: Image.memory(pages[i].bytes, fit: BoxFit.cover)),
+                child: Image.memory(pages[i].displayed, fit: BoxFit.cover)),
             ),
           )),
         const SizedBox(height: 12),
@@ -289,10 +364,12 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.3: skany są tylko w pamięci. '
+        const Text('Wersja 0.4: eksperymentalna korekta na kontrastowym tle. '
+          'Zawsze sprawdź podgląd przed zatwierdzeniem. '
+          'Skany są tylko w pamięci. '
           'Odświeżenie lub zamknięcie strony usuwa je. '
           'Zapisz wyeksportowany PDF na telefonie. '
-          'Automatyczne kadrowanie, OCR i Drive dodamy później.',
+          'OCR, ręczna korekta narożników i Drive będą rozwijane później.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
