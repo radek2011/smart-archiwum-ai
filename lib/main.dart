@@ -179,21 +179,6 @@ class _ArchiveHomeState extends State<ArchiveHome> {
     ),
   );
 
-  Widget _scan() => _subPage('Nowy skan', Icons.document_scanner_outlined, [
-    const Text('Tutaj uruchomimy aparat i skanowanie wielu stron.'),
-    const SizedBox(height: 18),
-    FilledButton.icon(
-      key: const Key('cameraDemo'),
-      onPressed: () => showComingSoon('Aparat i skanowanie'),
-      icon: const Icon(Icons.camera_alt_outlined), label: const Text('Zeskanuj dokument')),
-    const SizedBox(height: 10),
-    OutlinedButton.icon(onPressed: () => showComingSoon('Import z galerii'),
-      icon: const Icon(Icons.photo_library_outlined), label: const Text('Dodaj z galerii')),
-    const SizedBox(height: 16),
-    const Text('Docelowy PDF: analiza AI → pełna transkrypcja → oryginalne zdjęcia.',
-      textAlign: TextAlign.center),
-  ]);
-
   Widget _archive() => ListView(
     padding: const EdgeInsets.all(18),
     children: [
