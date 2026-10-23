@@ -14,7 +14,7 @@ class ScanPage extends StatefulWidget {
 }
 
 class _PagePhoto {
-  const _PagePhoto(this.bytes, this.width, this.height);
+  _PagePhoto(this.bytes, this.width, this.height);
   Uint8List? corrected;
   Uint8List get displayed => corrected ?? bytes;
   final Uint8List bytes;
