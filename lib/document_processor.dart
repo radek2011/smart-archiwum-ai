@@ -2,9 +2,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 
-/// Experimental document detector for a bright sheet against a darker,
-/// contrasting background. It never overwrites the original scan.
-/// Returns null when the boundary is uncertain.
+/// Safe crop for a bright document on a dark background.
+/// Uses the full paper silhouette instead of the central-column estimate.
+/// Does not distort pixels or apply unreliable perspective transforms.
+/// Returns null when boundary detection is unsafe.
 Uint8List? deskewDocument(Uint8List source) {
   final decoded = img.decodeImage(source);
   if (decoded == null) return null;
@@ -16,105 +17,88 @@ Uint8List? deskewDocument(Uint8List source) {
   );
   final w = preview.width;
   final h = preview.height;
-  if (w < 60 || h < 60) return null;
+  if (w < 100 || h < 100) return null;
 
-  bool isPaper(int x, int y) {
+  bool lightPaper(int x, int y) {
     final p = preview.getPixel(x, y);
     final r = p.r.toDouble();
     final g = p.g.toDouble();
     final b = p.b.toDouble();
-    final minChannel = math.min(r, math.min(g, b));
-    final maxChannel = math.max(r, math.max(g, b));
-    return minChannel > 155 && maxChannel - minChannel < 65;
+    final minValue = math.min(r, math.min(g, b));
+    final maxValue = math.max(r, math.max(g, b));
+    return minValue > 145 && (maxValue - minValue) < 85;
   }
 
-  // Reject light backgrounds where the paper boundary is ambiguous.
-  var cornersBright = 0;
-  for (final point in [[8, 8], [w - 9, 8], [8, h - 9], [w - 9, h - 9]]) {
-    if (isPaper(point[0], point[1])) cornersBright++;
+  // Reject white/bright backgrounds without distinguishable page edges.
+  var brightCorners = 0;
+  for (final p in [
+    [5, 5], [w - 6, 5], [5, h - 6], [w - 6, h - 6]
+  ]) {
+    if (lightPaper(p[0], p[1])) brightCorners++;
   }
-  if (cornersBright >= 2) return null;
+  if (brightCorners >= 2) return null;
 
-  final cx = w ~/ 2;
-  int? top;
-  int? bottom;
-  // Require runs to avoid mistaking bright lettering and reflections for paper.
+  // Each scan row contributes to the sheet outline, including the empty
+  // bottom margin and handwritten notes which the old detector cropped.
+  final rows = <int>[];
+  final leftEdges = <int>[];
+  final rightEdges = <int>[];
   for (var y = 5; y < h - 5; y++) {
-    if (List.generate(7, (i) => isPaper(cx, y + i - 3))
-        .where((v) => v).length >= 5) {
-      top = y;
-      break;
-    }
-  }
-  for (var y = h - 6; y >= 5; y--) {
-    if (List.generate(7, (i) => isPaper(cx, y + i - 3))
-        .where((v) => v).length >= 5) {
-      bottom = y;
-      break;
-    }
-  }
-  if (top == null || bottom == null || bottom - top < h * .32) return null;
-
-  // Measure left/right margins at upper and lower portions of the sheet.
-  (double, double)? span(int y) {
-    int? left;
-    int? right;
-    for (var x = 4; x < w - 4; x++) {
-      if (isPaper(x, y) && isPaper(x + 2, y) && isPaper(x + 4, y)) {
-        left = x;
-        break;
-      }
-    }
-    for (var x = w - 5; x >= 4; x--) {
-      if (isPaper(x, y) && isPaper(x - 2, y) && isPaper(x - 4, y)) {
+    var count = 0;
+    var left = w;
+    var right = 0;
+    for (var x = 4; x < w - 4; x += 2) {
+      if (lightPaper(x, y)) {
+        count++;
+        if (left == w) left = x;
         right = x;
-        break;
       }
     }
-    if (left == null || right == null || right - left < w * .30) return null;
-    return (left.toDouble(), right.toDouble());
-  }
-
-  final upperY = (top + (bottom - top) * .16).round();
-  final lowerY = (top + (bottom - top) * .84).round();
-  final upper = span(upperY);
-  final lower = span(lowerY);
-  if (upper == null || lower == null) return null;
-
-  final widthFrac = ((upper.$2 - upper.$1) +
-      (lower.$2 - lower.$1)) / (2 * w);
-  final heightFrac = (bottom - top) / h;
-  if (widthFrac < .35 || heightFrac < .32) return null;
-
-  // Preserve useful document detail while limiting mobile-browser memory.
-  const longEdge = 2400;
-  final ratio = ((widthFrac * decoded.width) /
-      (heightFrac * decoded.height)).clamp(.35, 2.6).toDouble();
-  final outputWidth = ratio >= 1 ? longEdge : (longEdge * ratio).round();
-  final outputHeight = ratio >= 1 ? (longEdge / ratio).round() : longEdge;
-  final output = img.Image(width: outputWidth, height: outputHeight);
-  final topLeft = upper.$1 / w * decoded.width;
-  final topRight = upper.$2 / w * decoded.width;
-  final bottomLeft = lower.$1 / w * decoded.width;
-  final bottomRight = lower.$2 / w * decoded.width;
-  final firstY = top / h * decoded.height;
-  final lastY = bottom / h * decoded.height;
-
-  // Trapezoidal perspective approximation. Fully projective correction and
-  // manual corner positioning are planned for the next imaging iteration.
-  for (var y = 0; y < outputHeight; y++) {
-    final v = (y + .5) / outputHeight;
-    final left = topLeft * (1 - v) + bottomLeft * v;
-    final right = topRight * (1 - v) + bottomRight * v;
-    final sy = (firstY + (lastY - firstY) * v).round()
-        .clamp(0, decoded.height - 1).toInt();
-    for (var x = 0; x < outputWidth; x++) {
-      final u = (x + .5) / outputWidth;
-      final sx = (left + (right - left) * u).round()
-          .clamp(0, decoded.width - 1).toInt();
-      final pixel = decoded.getPixel(sx, sy);
-      output.setPixelRgb(x, y, pixel.r, pixel.g, pixel.b);
+    // Require a sufficiently wide bright region (not just a reflection).
+    if (count >= (w * .33 / 2).ceil() &&
+        right - left >= (w * .42).round()) {
+      rows.add(y);
+      leftEdges.add(left);
+      rightEdges.add(right);
     }
   }
-  return Uint8List.fromList(img.encodeJpg(output, quality: 90));
+  if (rows.length < (h * .32).round()) return null;
+
+  // Percentiles reject individual speckles on the dark background.
+  int percentile(List<int> input, double fraction) {
+    final ordered = List<int>.from(input)..sort();
+    return ordered[((ordered.length - 1) * fraction).floor()];
+  }
+
+  var top = percentile(rows, .005);
+  var bottom = percentile(rows, .995);
+  var left = percentile(leftEdges, .02);
+  var right = percentile(rightEdges, .98);
+
+  // Broad safety margin guarantees preservation of handwriting along edges.
+  final horizontalMargin = math.max(6, (w * .025).round());
+  final verticalMargin = math.max(6, (h * .025).round());
+  left = math.max(0, left - horizontalMargin);
+  right = math.min(w - 1, right + horizontalMargin);
+  top = math.max(0, top - verticalMargin);
+  bottom = math.min(h - 1, bottom + verticalMargin);
+
+  final cropW = right - left + 1;
+  final cropH = bottom - top + 1;
+  if (cropW < w * .40 || cropH < h * .35) return null;
+
+  // Reject accidental detection of almost the whole photo or tiny pieces.
+  if (cropW / w > .985 && cropH / h > .985) return null;
+
+  final x0 = (left * decoded.width / w).floor().clamp(0, decoded.width - 1);
+  final y0 = (top * decoded.height / h).floor().clamp(0, decoded.height - 1);
+  final x1 = ((right + 1) * decoded.width / w).ceil()
+      .clamp(x0 + 1, decoded.width);
+  final y1 = ((bottom + 1) * decoded.height / h).ceil()
+      .clamp(y0 + 1, decoded.height);
+  final cropped = img.copyCrop(decoded,
+    x: x0, y: y0, width: x1 - x0, height: y1 - y0);
+
+  // Preserve details and previously validated image quality.
+  return Uint8List.fromList(img.encodeJpg(cropped, quality: 90));
 }
