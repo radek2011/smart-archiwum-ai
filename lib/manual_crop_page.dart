@@ -17,6 +17,7 @@ class _ManualCropPageState extends State<ManualCropPage> {
     const Offset(.94, .94), const Offset(.06, .94),
   ];
   bool working = false;
+  int? _draggedCorner;
   String? error;
   static const accent = Color(0xFFF36B21);
   Size? _imageSize;
@@ -29,19 +30,23 @@ class _ManualCropPageState extends State<ManualCropPage> {
         decoded.width.toDouble(), decoded.height.toDouble());
   }
 
-  void _move(Offset local, Size size) {
+  void _move(Offset local, Size size, {bool start = false}) {
     final pos = Offset(
       (local.dx / size.width).clamp(0.0, 1.0),
       (local.dy / size.height).clamp(0.0, 1.0),
     );
-    var nearest = 0;
-    var distance = double.infinity;
-    for (var i = 0; i < corners.length; i++) {
-      final d = (corners[i] - pos).distanceSquared;
-      if (d < distance) { nearest = i; distance = d; }
+    if (start) {
+      var nearest = 0;
+      var distance = double.infinity;
+      for (var i = 0; i < corners.length; i++) {
+        final d = (corners[i] - pos).distanceSquared;
+        if (d < distance) { nearest = i; distance = d; }
+      }
+      if (distance > .045) { _draggedCorner = null; return; }
+      _draggedCorner = nearest;
     }
-    if (distance > .055) return;
-    setState(() => corners[nearest] = pos);
+    if (_draggedCorner == null) return;
+    setState(() => corners[_draggedCorner!] = pos);
   }
 
   Future<void> _apply() async {
@@ -85,9 +90,13 @@ class _ManualCropPageState extends State<ManualCropPage> {
             width: size.width, height: size.height,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onPanStart: (d) => _move(d.localPosition, size),
+              onPanStart: (d) => _move(d.localPosition, size, start: true),
               onPanUpdate: (d) => _move(d.localPosition, size),
-              onTapDown: (d) => _move(d.localPosition, size),
+              onPanEnd: (_) => _draggedCorner = null,
+              onTapDown: (d) {
+                _move(d.localPosition, size, start: true);
+                _draggedCorner = null;
+              },
               child: Stack(fit: StackFit.expand, children: [
                 Image.memory(widget.source, fit: BoxFit.fill,
                   gaplessPlayback: true),
