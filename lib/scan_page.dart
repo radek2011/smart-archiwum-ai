@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'document_processor.dart';
 import 'manual_crop_page.dart';
+import 'ai_analysis.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -125,6 +126,29 @@ class _ScanPageState extends State<ScanPage> {
       }
     } catch (e) {
       if (mounted) message('Problem z aparatem lub galerią: ' + e.toString());
+    } finally {
+      if (mounted) setState(() { busy = false; progress = ''; });
+    }
+  }
+
+  Future<void> analyzeDocument() async {
+    if (busy || pages.isEmpty) return;
+    setState(() { busy = true; progress = 'Analiza dokumentu AI…'; });
+    try {
+      final result = await AiAnalysis.run(
+        context, pages.map((p) => p.displayed).toList());
+      if (!mounted || result == null) return;
+      setState(() {
+        if (result.title.trim().isNotEmpty) {
+          titleController.text = result.title.trim().substring(
+            0, result.title.trim().length > 80 ? 80 : result.title.trim().length);
+        }
+        if (categories.contains(result.category)) category = result.category;
+        if (DateTime.tryParse(result.date) != null) {
+          dateController.text = result.date;
+        }
+      });
+      message('Dane AI zastosowane — możesz je edytować przed zapisem PDF.');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
@@ -486,6 +510,12 @@ class _ScanPageState extends State<ScanPage> {
                   key: ValueKey(pages[i].displayed), fit: BoxFit.cover)),
             ),
           )),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          key: const Key('analyzeAiButton'),
+          onPressed: busy ? null : analyzeDocument,
+          icon: const Icon(Icons.auto_awesome),
+          label: const Text('Analizuj dokument z Gemini (test)')),
         const SizedBox(height: 12),
         FilledButton.icon(
           key: const Key('exportPdfButton'),
