@@ -122,13 +122,13 @@ class _ScanPageState extends State<ScanPage> {
     final originalPage = pages[selected];
     setState(() {
       busy = true;
-      progress = 'Wykrywanie kartki i prostowanie…';
+      progress = 'Bezpieczne wykrywanie całej kartki…';
     });
     try {
       final result = deskewDocument(originalPage.bytes);
       if (!mounted) return;
       if (result == null) {
-        message('Nie wykryto pewnych krawędzi kartki. Zachowano oryginał. '
+        message('Nie udało się pewnie wykryć całej kartki. Zachowano oryginał. '
           'Spróbuj fotografować na ciemnym, jednolitym tle.');
         return;
       }
@@ -145,7 +145,7 @@ class _ScanPageState extends State<ScanPage> {
               Image.memory(originalPage.bytes, height: 240,
                 fit: BoxFit.contain),
               const SizedBox(height: 12),
-              const Text('Automatyczna korekta (wersja testowa)',
+              const Text('Bezpieczne kadrowanie (wersja 0.4.1)',
                 style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               Image.memory(result, height: 240, fit: BoxFit.contain),
@@ -364,7 +364,8 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.4: eksperymentalna korekta na kontrastowym tle. '
+        const Text('Wersja 0.4.1: ostrożne kadrowanie na kontrastowym tle; '
+          'bez automatycznej korekcji perspektywy. '
           'Zawsze sprawdź podgląd przed zatwierdzeniem. '
           'Skany są tylko w pamięci. '
           'Odświeżenie lub zamknięcie strony usuwa je. '
