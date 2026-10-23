@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'document_processor.dart';
+import 'manual_crop_page.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -176,6 +177,48 @@ class _ScanPageState extends State<ScanPage> {
     }
   }
 
+  Future<void> cropSelectedManually() async {
+    if (busy || pages.isEmpty) return;
+    final selectedPage = pages[selected];
+    final corrected = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute<Uint8List>(
+        builder: (_) => ManualCropPage(source: selectedPage.bytes),
+      ),
+    );
+    if (!mounted || corrected == null || !pages.contains(selectedPage)) return;
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Zatwierdź ręczne kadrowanie'),
+        content: SizedBox(
+          width: 440,
+          child: ListView(shrinkWrap: true, children: [
+            const Text('Przed', style: TextStyle(fontWeight: FontWeight.bold)),
+            Image.memory(selectedPage.bytes, height: 180, fit: BoxFit.contain),
+            const SizedBox(height: 10),
+            const Text('Po', style: TextStyle(fontWeight: FontWeight.bold)),
+            Image.memory(corrected, height: 280, fit: BoxFit.contain),
+            const SizedBox(height: 8),
+            const Text('Upewnij się, że tekst i podpisy nie zostały ucięte.'),
+          ]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Wróć bez zmian')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Zastosuj korektę')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (apply == true && pages.contains(selectedPage)) {
+      setState(() => selectedPage.corrected = corrected);
+      message('Kadrowanie zastosowane. Możesz przywrócić oryginał.');
+    }
+  }
+
   void restoreOriginal() {
     if (pages.isEmpty || busy) return;
     setState(() => pages[selected].corrected = null);
@@ -320,6 +363,9 @@ class _ScanPageState extends State<ScanPage> {
                   IconButton(tooltip: 'Automatyczna korekta',
                     onPressed: busy ? null : correctSelected,
                     icon: const Icon(Icons.auto_fix_high)),
+                  IconButton(tooltip: 'Kadruj ręcznie',
+                    onPressed: busy ? null : cropSelectedManually,
+                    icon: const Icon(Icons.crop_free)),
                   IconButton(tooltip: 'Przywróć oryginał',
                     onPressed: !busy && pages[selected].corrected != null
                       ? restoreOriginal : null,
@@ -367,7 +413,7 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.4.1: ostrożne kadrowanie na kontrastowym tle; '
+        const Text('Wersja 0.4.2: ostrożne kadrowanie na kontrastowym tle; '
           'bez automatycznej korekcji perspektywy. '
           'Zawsze sprawdź podgląd przed zatwierdzeniem. '
           'Skany są tylko w pamięci. '
