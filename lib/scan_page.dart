@@ -370,7 +370,7 @@ class _ScanPageState extends State<ScanPage> {
       ),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        key: const Key('documentCategory'),
+        key: ValueKey('documentCategory_' + category),
         initialValue: category,
         decoration: const InputDecoration(
           labelText: 'Kategoria', border: OutlineInputBorder()),
@@ -525,13 +525,14 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.4.2: ostrożne kadrowanie na kontrastowym tle; '
+        const Text('Wersja 0.6: ostrożne kadrowanie na kontrastowym tle; '
           'bez automatycznej korekcji perspektywy. '
           'Zawsze sprawdź podgląd przed zatwierdzeniem. '
           'Skany są tylko w pamięci. '
           'Odświeżenie lub zamknięcie strony usuwa je. '
           'Zapisz wyeksportowany PDF na telefonie. '
-          'OCR, ręczna korekta narożników i Drive będą rozwijane później.',
+          'Analiza Gemini wymaga osobnego serwera i Twojej zgody na wysłanie stron. '
+          'Trwałe archiwum i Google Drive nie są jeszcze dostępne.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
