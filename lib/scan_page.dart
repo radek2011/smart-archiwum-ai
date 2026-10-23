@@ -44,7 +44,7 @@ class _ScanPageState extends State<ScanPage> {
   String safePart(String text) {
     final normalized = text.trim().replaceAll(
       RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ _-]'), '');
-    final compact = normalized.replaceAll(RegExp(r'\\s+'), '_');
+    final compact = normalized.replaceAll(RegExp(r'\s+'), '_');
     return compact.isEmpty ? 'Dokument' : compact.substring(
       0, compact.length > 55 ? 55 : compact.length);
   }
