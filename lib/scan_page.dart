@@ -25,6 +25,40 @@ class _PagePhoto {
 
 class _ScanPageState extends State<ScanPage> {
   final ImagePicker picker = ImagePicker();
+  final TextEditingController titleController = TextEditingController();
+  final TextEditingController dateController = TextEditingController(
+    text: DateTime.now().toIso8601String().substring(0, 10));
+  String category = 'Inne';
+  static const categories = <String>[
+    'Umowy', 'Faktury', 'Korespondencja', 'Notatki',
+    'Dokumenty firmowe', 'Inne',
+  ];
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    dateController.dispose();
+    super.dispose();
+  }
+
+  String safePart(String text) {
+    final normalized = text.trim().replaceAll(
+      RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ _-]'), '');
+    final compact = normalized.replaceAll(RegExp(r'\\s+'), '_');
+    return compact.isEmpty ? 'Dokument' : compact.substring(
+      0, compact.length > 55 ? 55 : compact.length);
+  }
+
+  Future<void> selectDocumentDate() async {
+    final initial = DateTime.tryParse(dateController.text) ?? DateTime.now();
+    final chosen = await showDatePicker(
+      context: context, initialDate: initial,
+      firstDate: DateTime(1990), lastDate: DateTime(2100));
+    if (chosen != null && mounted) {
+      setState(() => dateController.text =
+          chosen.toIso8601String().substring(0, 10));
+    }
+  }
   final List<_PagePhoto> pages = [];
   int selected = 0;
   bool busy = false;
@@ -242,7 +276,13 @@ class _ScanPageState extends State<ScanPage> {
     if (busy || pages.isEmpty) return;
     setState(() { busy = true; progress = 'Tworzenie pliku PDF…'; });
     try {
-      final document = pw.Document(compress: true);
+      final documentTitle = titleController.text.trim().isEmpty
+          ? 'Skan dokumentu' : titleController.text.trim();
+      final document = pw.Document(
+        compress: true, title: documentTitle,
+        author: 'Smart Archiwum AI – RentSide',
+        subject: category,
+      );
       for (final page in pages) {
         final photo = pw.MemoryImage(page.displayed);
         document.addPage(pw.Page(
@@ -255,10 +295,12 @@ class _ScanPageState extends State<ScanPage> {
       }
       final bytes = await document.save();
       if (!mounted) return;
-      final timestamp = DateTime.now().toIso8601String()
-          .substring(0, 19).replaceAll(':', '-');
-      await Printing.sharePdf(
-        bytes: bytes, filename: 'Smart_Archiwum_$timestamp.pdf');
+      final documentDate = DateTime.tryParse(dateController.text)
+          ?.toIso8601String().substring(0, 10) ??
+          DateTime.now().toIso8601String().substring(0, 10);
+      final fileName = '${documentDate}_${safePart(category)}_'
+          '${safePart(documentTitle)}.pdf';
+      await Printing.sharePdf(bytes: bytes, filename: fileName);
       if (mounted) message('PDF przygotowany. Zapisz go z menu telefonu.');
     } catch (e) {
       if (mounted) message('Nie udało się utworzyć PDF: $e');
@@ -289,6 +331,46 @@ class _ScanPageState extends State<ScanPage> {
       const SizedBox(height: 8),
       const Text('Fotografuj kolejne strony lub wybierz kilka zdjęć z galerii. '
         'Każda strona zostanie zoptymalizowana do czytelnego JPEG.'),
+      const SizedBox(height: 18),
+      const Text('Opis dokumentu', style: TextStyle(
+        fontSize: 17, fontWeight: FontWeight.bold, color: navy)),
+      const SizedBox(height: 8),
+      TextField(
+        key: const Key('documentTitle'),
+        controller: titleController,
+        maxLength: 80,
+        decoration: const InputDecoration(
+          labelText: 'Nazwa dokumentu',
+          hintText: 'np. Umowa najmu',
+          border: OutlineInputBorder()),
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        key: const Key('documentCategory'),
+        initialValue: category,
+        decoration: const InputDecoration(
+          labelText: 'Kategoria', border: OutlineInputBorder()),
+        items: categories.map((value) => DropdownMenuItem<String>(
+          value: value, child: Text(value))).toList(),
+        onChanged: busy ? null : (value) {
+          if (value != null) setState(() => category = value);
+        },
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        key: const Key('documentDate'),
+        controller: dateController,
+        readOnly: true,
+        onTap: selectDocumentDate,
+        decoration: InputDecoration(
+          labelText: 'Data dokumentu',
+          border: const OutlineInputBorder(),
+          suffixIcon: IconButton(
+            tooltip: 'Wybierz datę',
+            onPressed: selectDocumentDate,
+            icon: const Icon(Icons.calendar_month_outlined)),
+        ),
+      ),
       const SizedBox(height: 18),
       FilledButton.icon(
         key: const Key('cameraButton'),
