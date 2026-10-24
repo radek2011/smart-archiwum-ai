@@ -10,6 +10,12 @@ class AiSuggestion {
 }
 
 class AiAnalysis {
+  // In-memory only; disappears when the page reloads or tab is closed.
+  static const serverUrl = 'https://smart-archiwum-ai.radek-f53.workers.dev';
+  static String _sessionToken = '';
+  static bool get configured => _sessionToken.isNotEmpty;
+  static void clearSessionToken() => _sessionToken = '';
+
   static Future<AiSuggestion?> run(
     BuildContext context, List<Uint8List> pages) async {
     if (pages.isEmpty) return null;
@@ -17,46 +23,55 @@ class AiAnalysis {
       _notice(context, 'AI obsługuje do 5 stron na jeden test.');
       return null;
     }
-    final endpoint = TextEditingController();
-    final token = TextEditingController();
-    final settings = await showDialog<List<String>>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Analiza z Gemini — test'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Zdjęcia zostaną wysłane do Twojego serwera '
-                'i do Gemini. Nie używaj poufnych dokumentów. '
-                'Ta funkcja wymaga skonfigurowanego serwera.'),
-            const SizedBox(height: 12),
-            TextField(controller: endpoint, decoration: const InputDecoration(
-              border: OutlineInputBorder(), labelText: 'Adres serwera HTTPS')),
-            const SizedBox(height: 12),
-            TextField(controller: token, obscureText: true,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(), labelText: 'Token dostępu')),
-            const SizedBox(height: 8),
-            const Text('Nie wpisuj klucza API Gemini. '
-              'Konfiguracja nie jest zapisywana.',
-              style: TextStyle(fontSize: 12)),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext,
-              [endpoint.text.trim(), token.text.trim()]),
-            child: const Text('Wyślij do analizy')),
-        ],
-      ),
-    );
-    if (!context.mounted || settings == null) return null;
-    final uri = Uri.tryParse(settings[0]);
-    if (uri == null || uri.scheme != 'https' ||
-        uri.host.isEmpty || settings[1].isEmpty) {
-      _notice(context, 'Podaj prawidłowy adres HTTPS i token.');
-      return null;
+    if (_sessionToken.isEmpty) {
+      final input = TextEditingController();
+      try {
+        final entered = await showDialog<String>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Połącz Gemini na tę sesję'),
+            content: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Adres serwera jest ustawiony automatycznie. '
+                    'Wpisz token APP_ACCESS_TOKEN z Cloudflare tylko raz '
+                    'na czas otwartej sesji. Zdjęcia zostaną wysłane do '
+                    'Cloudflare i Gemini; nie używaj poufnych dokumentów.'),
+                const SizedBox(height: 12),
+                const SelectableText(serverUrl),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: input,
+                  obscureText: true,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Token dostępu (nie klucz Gemini API)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            )),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Anuluj')),
+              FilledButton(onPressed: () => Navigator.pop(
+                  dialogContext, input.text.trim()),
+                child: const Text('Połącz i analizuj')),
+            ],
+          ),
+        );
+        if (!context.mounted || entered == null) return null;
+        if (entered.isEmpty) {
+          _notice(context, 'Wprowadź token dostępu Cloudflare.');
+          return null;
+        }
+        _sessionToken = entered;
+      } finally {
+        input.dispose();
+      }
     }
+    final uri = Uri.parse(serverUrl);
     try {
       final images = <String>[];
       for (final bytes in pages) {
@@ -75,11 +90,14 @@ class AiAnalysis {
       final response = await http.post(uri,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + settings[1],
+          'Authorization': 'Bearer ' + _sessionToken,
         },
         body: jsonEncode({'images': images}),
       ).timeout(const Duration(seconds: 55));
       if (response.statusCode != 200) {
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          clearSessionToken();
+        }
         String detail = '';
         try {
           final payload = jsonDecode(response.body);
