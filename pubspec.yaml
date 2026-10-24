@@ -1,7 +1,7 @@
 name: smart_archiwum_ai
 description: RentSide Smart Archiwum AI - prototype interfejsu.
 publish_to: 'none'
-version: 0.8.0+10
+version: 1.0.0+11
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:
