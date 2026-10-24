@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key, this.onSaved});
@@ -328,13 +329,72 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<Uint8List> buildDocumentPdf() async {
     final documentTitle = titleController.text.trim().isEmpty
-      ? 'Skan dokumentu' : titleController.text.trim();
+        ? 'Skan dokumentu' : titleController.text.trim();
+    final documentDate = DateTime.tryParse(dateController.text)
+        ?.toIso8601String().substring(0, 10)
+        ?? (scannedAt ?? DateTime.now()).toIso8601String().substring(0, 10);
+
+    // An embedded Unicode font makes Polish OCR text genuinely searchable
+    // and selectable inside the PDF, rather than flattening it to an image.
+    final regular = await PdfGoogleFonts.notoSansRegular();
+    final bold = await PdfGoogleFonts.notoSansBold();
+    final bodyStyle = pw.TextStyle(font: regular, fontSize: 10.5, lineSpacing: 3);
     final doc = pw.Document(
       compress: true,
       title: documentTitle,
-      author: 'Smart Archiwum AI - RentSide',
-      subject: category,
+      author: 'Smart Archiwum AI',
+      subject: '$category • $documentDate',
+      keywords: 'Smart Archiwum AI, OCR, $category',
     );
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(42, 44, 42, 44),
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      footer: (context) => pw.Align(
+        alignment: pw.Alignment.centerRight,
+        child: pw.Text('Smart Archiwum AI • strona ${context.pageNumber}',
+          style: pw.TextStyle(font: regular, fontSize: 8,
+            color: PdfColors.grey600)),
+      ),
+      build: (context) => [
+        pw.Text('KARTA DOKUMENTU',
+          style: pw.TextStyle(font: bold, fontSize: 11,
+            color: PdfColors.blueGrey700)),
+        pw.SizedBox(height: 10),
+        pw.Text(documentTitle, style: pw.TextStyle(
+          font: bold, fontSize: 20, color: PdfColors.blueGrey900)),
+        pw.SizedBox(height: 18),
+        pw.Text('Data dokumentu: $documentDate', style: bodyStyle),
+        pw.SizedBox(height: 4),
+        pw.Text('Kategoria: $category', style: bodyStyle),
+        pw.SizedBox(height: 4),
+        pw.Text('Liczba zeskanowanych stron: ${pages.length}', style: bodyStyle),
+        if (aiSummary.trim().isNotEmpty) ...[
+          pw.SizedBox(height: 18),
+          pw.Text('Podsumowanie AI',
+            style: pw.TextStyle(font: bold, fontSize: 13)),
+          pw.SizedBox(height: 7),
+          pw.Text(aiSummary.trim(), style: bodyStyle),
+        ],
+        pw.SizedBox(height: 20),
+        pw.Divider(color: PdfColors.grey400),
+        pw.SizedBox(height: 10),
+        pw.Text('ROZPOZNANA TREŚĆ DOKUMENTU',
+          style: pw.TextStyle(font: bold, fontSize: 14)),
+        pw.SizedBox(height: 8),
+        pw.Text('Poniższy tekst został odczytany automatycznie przez Gemini. '
+          'Może zawierać pomyłki lub pominięcia. '
+          'Zdjęcia oryginału znajdują się na końcu pliku.',
+          style: pw.TextStyle(font: regular, fontSize: 9,
+            color: PdfColors.grey700)),
+        pw.SizedBox(height: 14),
+        pw.Text(aiExtractedText.trim(), style: bodyStyle),
+      ],
+    ));
+
+    // Retain the source evidence in full, in the user's original page order.
+    // These images are added as separate pages AFTER selectable OCR text.
     for (final page in pages) {
       final photo = pw.MemoryImage(page.displayed);
       doc.addPage(pw.Page(
@@ -349,6 +409,17 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<void> saveAndUpload() async {
     if (busy || pages.isEmpty) return;
+    if (aiExtractedText.trim().isEmpty) {
+      message('Najpierw przeanalizuj dokument z Gemini i zatwierdź wynik. '
+        'Bez OCR nie można utworzyć pełnego PDF tekstowego.');
+      return;
+    }
+    if (pages.length > 5) {
+      message('Gemini analizuje maksymalnie 5 stron na raz. '
+        'Podziel większy dokument, aby nie zgubić treści.');
+      return;
+    }
+
     final date = DateTime.tryParse(dateController.text)
         ?.toIso8601String().substring(0, 10)
         ?? (scannedAt ?? DateTime.now()).toIso8601String().substring(0, 10);
