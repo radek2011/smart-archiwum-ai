@@ -74,7 +74,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
   @override
   Widget build(BuildContext context) {
     final found = documents.where((doc) =>
-      (doc.title + ' ' + doc.category + ' ' + doc.date)
+      (doc.title + ' ' + doc.category + ' ' + doc.date + ' ' + doc.summary + ' ' + doc.extractedText)
           .toLowerCase().contains(query.toLowerCase())).toList();
     return ListView(
       key: const Key('localArchivePage'),
@@ -97,7 +97,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
           key: const Key('localArchiveSearch'),
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
-            labelText: 'Szukaj według nazwy, daty lub kategorii',
+            labelText: 'Szukaj po nazwie, opisie lub treści',
             border: OutlineInputBorder()),
           onChanged: (text) => setState(() => query = text),
         ),
@@ -124,7 +124,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
               color: Color(0xFFF36B21)),
             title: Text(doc.title),
             subtitle: Text(doc.category + ' • ' + doc.date + ' • ' +
-              (doc.size / 1048576).toStringAsFixed(2) + ' MB'),
+              (doc.size / 1048576).toStringAsFixed(2) + ' MB' + (doc.extractedText.isNotEmpty ? ' • OCR' : ' • bez OCR')),
             onTap: () => openPdf(doc),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               IconButton(
