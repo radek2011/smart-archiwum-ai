@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'local_archive_store.dart';
+import 'drive_uploader.dart';
 
 class LocalArchivePage extends StatefulWidget {
   const LocalArchivePage({super.key});
@@ -84,7 +85,8 @@ class LocalArchivePageState extends State<LocalArchivePage> {
           color: Color(0xFF101F43))),
         const SizedBox(height: 8),
         const Text('Dokumenty zapisane lokalnie w tej przeglądarce. '
-          'Nie są synchronizowane z Google Drive ani innymi urządzeniami.'),
+          'Możesz ręcznie przesłać wybrany PDF na Dysk Google. '
+          'Nie ma jeszcze automatycznej synchronizacji między urządzeniami.'),
         const SizedBox(height: 12),
         const Text('UWAGA: wyczyszczenie danych przeglądarki, tryb prywatny '
           'lub brak miejsca mogą usunąć dokumenty. Zachowuj również kopie PDF '
@@ -124,10 +126,18 @@ class LocalArchivePageState extends State<LocalArchivePage> {
             subtitle: Text(doc.category + ' • ' + doc.date + ' • ' +
               (doc.size / 1048576).toStringAsFixed(2) + ' MB'),
             onTap: () => openPdf(doc),
-            trailing: IconButton(
-              tooltip: 'Usuń z archiwum',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => remove(doc)),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                tooltip: 'Wyślij PDF na Dysk Google',
+                icon: const Icon(Icons.cloud_upload_outlined),
+                onPressed: () => DriveUploader.uploadWithConsent(
+                  context, pdf: doc.pdfBytes,
+                  title: doc.title, date: doc.date)),
+              IconButton(
+                tooltip: 'Usuń z archiwum',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => remove(doc)),
+            ]),
           )),
       ],
     );
