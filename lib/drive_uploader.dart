@@ -15,6 +15,7 @@ class DriveUploader {
   }) async {
     final clientController = TextEditingController(text: _clientIdThisSession);
     final completion = Completer<String?>();
+    var initiated = false;
     try {
       await showDialog<void>(
         context: context,
@@ -59,6 +60,7 @@ class DriveUploader {
                 }
                 // Authorization runs in the direct user-click stack so
                 // mobile browsers can open Google consent.
+                initiated = true;
                 _clientIdThisSession = id;
                 final authorization = authorizeDrive(id);
                 Navigator.pop(dialogContext);
@@ -74,7 +76,7 @@ class DriveUploader {
     } finally {
       clientController.dispose();
     }
-    if (!completion.isCompleted) completion.complete(null);
+    if (!initiated && !completion.isCompleted) completion.complete(null);
     return completion.future;
   }
 
@@ -112,6 +114,7 @@ class DriveUploader {
           content: Text('Nie udało się wysłać PDF: ' + error.toString()),
           duration: const Duration(seconds: 12)));
       }
+      return null;
     }
   }
 
