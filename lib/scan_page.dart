@@ -4,6 +4,7 @@ import 'document_processor.dart';
 import 'manual_crop_page.dart';
 import 'ai_analysis.dart';
 import 'local_archive_store.dart';
+import 'drive_uploader.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -356,25 +357,29 @@ class _ScanPageState extends State<ScanPage> {
     return Uint8List.fromList(await doc.save());
   }
 
-  Future<void> saveToArchive() async {
-    if (busy || pages.isEmpty) return;
+  Future<LocalArchiveRecord?> saveToArchive({bool withDrive = false}) async {
+    if (busy || pages.isEmpty) return null;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Zapis lokalny'),
-        content: const Text('Dokument zostanie zapisany w pamięci tej '
-          'przeglądarki, nie w chmurze. Może zniknąć po usunięciu danych '
-          'przeglądarki. Zachowaj również osobną kopię PDF.'),
+        title: Text(withDrive ? 'Zapis lokalny i Google Drive' : 'Zapis lokalny'),
+        content: Text(withDrive
+          ? 'Najpierw zapiszemy PDF lokalnie, potem poprosimy o zgodę '
+            'Google na przesłanie go do folderu Smart Archiwum AI / '
+            'wybrana kategoria. Jeśli przesyłanie się nie powiedzie, '
+            'lokalny PDF pozostanie zapisany.'
+          : 'Dokument będzie zapisany tylko w pamięci tej przeglądarki. '
+            'Zachowaj osobną kopię PDF na wypadek usunięcia danych przeglądarki.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Anuluj')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Zapisz lokalnie')),
+            child: Text(withDrive ? 'Zapisz i połącz Google' : 'Zapisz lokalnie')),
         ],
       ),
     );
-    if (confirm != true || !mounted) return;
-    setState(() { busy = true; progress = 'Zapisywanie PDF w archiwum…'; });
+    if (confirm != true || !mounted) return null;
+    setState(() { busy = true; progress = 'Zapisywanie PDF lokalnie…'; });
     try {
       final pdf = await buildDocumentPdf();
       final now = DateTime.now();
@@ -393,14 +398,30 @@ class _ScanPageState extends State<ScanPage> {
         extractedText: aiExtractedText,
       );
       await LocalArchiveStore.save(record);
-      if (!mounted) return;
+      if (!mounted) return record;
       widget.onSaved?.call();
-      message('Zapisano w lokalnym archiwum. Zachowaj też kopię PDF.');
+      message(withDrive
+        ? 'PDF zapisano lokalnie. Teraz potwierdź przesłanie do Google.'
+        : 'PDF zapisany lokalnie. Zachowaj także osobną kopię.');
+      return record;
     } catch (e) {
       if (mounted) message('Nie udało się zapisać lokalnie: ' + e.toString());
+      return null;
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
+  }
+
+  Future<void> saveAndUpload() async {
+    final saved = await saveToArchive(withDrive: true);
+    if (saved == null || !mounted) return;
+    await DriveUploader.uploadWithConsent(
+      context,
+      pdf: saved.pdfBytes,
+      title: saved.title,
+      date: saved.date,
+      category: saved.category,
+    );
   }
 
   Future<void> exportPdf() async {
@@ -626,11 +647,15 @@ class _ScanPageState extends State<ScanPage> {
         const SizedBox(height: 12),
         FilledButton.icon(
           key: const Key('saveArchiveButton'),
-          onPressed: busy ? null : saveToArchive,
+          onPressed: busy ? null : saveAndUpload,
           style: FilledButton.styleFrom(backgroundColor: orange,
             padding: const EdgeInsets.symmetric(vertical: 16)),
           icon: const Icon(Icons.folder_open),
-          label: const Text('Zapisz w archiwum (lokalnie)')),
+          label: const Text('Zapisz lokalnie i na Google Drive')),
+        TextButton.icon(
+          onPressed: busy ? null : () => saveToArchive(),
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Tylko zapis lokalny')),
         const SizedBox(height: 12),
         FilledButton.icon(
           key: const Key('exportPdfButton'),
