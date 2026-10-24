@@ -10,7 +10,6 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key, this.onSaved});
@@ -48,14 +47,6 @@ class _ScanPageState extends State<ScanPage> {
     titleController.dispose();
     dateController.dispose();
     super.dispose();
-  }
-
-  String safePart(String text) {
-    final normalized = text.trim().replaceAll(
-      RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ _-]'), '');
-    final compact = normalized.replaceAll(RegExp(r'\s+'), '_');
-    return compact.isEmpty ? 'Dokument' : compact.substring(
-      0, compact.length > 55 ? 55 : compact.length);
   }
 
   Future<void> selectDocumentDate() async {
@@ -411,43 +402,6 @@ class _ScanPageState extends State<ScanPage> {
     } catch (error) {
       if (mounted) message('Błąd zapisu: ' + error.toString() +
           '. Skany pozostają do ponownej próby.');
-    } finally {
-      if (mounted) setState(() { busy = false; progress = ''; });
-    }
-  }
-
-  Future<void> exportPdf() async {
-    if (busy || pages.isEmpty) return;
-    setState(() { busy = true; progress = 'Tworzenie pliku PDF…'; });
-    try {
-      final documentTitle = titleController.text.trim().isEmpty
-          ? 'Skan dokumentu' : titleController.text.trim();
-      final document = pw.Document(
-        compress: true, title: documentTitle,
-        author: 'Smart Archiwum AI – RentSide',
-        subject: category,
-      );
-      for (final page in pages) {
-        final photo = pw.MemoryImage(page.displayed);
-        document.addPage(pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(16),
-          build: (context) => pw.Center(
-            child: pw.Image(photo, fit: pw.BoxFit.contain),
-          ),
-        ));
-      }
-      final bytes = await document.save();
-      if (!mounted) return;
-      final documentDate = DateTime.tryParse(dateController.text)
-          ?.toIso8601String().substring(0, 10) ??
-          DateTime.now().toIso8601String().substring(0, 10);
-      final fileName = '${documentDate}_${safePart(category)}_'
-          '${safePart(documentTitle)}.pdf';
-      await Printing.sharePdf(bytes: bytes, filename: fileName);
-      if (mounted) message('PDF przygotowany. Zapisz go z menu telefonu.');
-    } catch (e) {
-      if (mounted) message('Nie udało się utworzyć PDF: $e');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
