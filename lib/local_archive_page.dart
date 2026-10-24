@@ -132,7 +132,8 @@ class LocalArchivePageState extends State<LocalArchivePage> {
                 icon: const Icon(Icons.cloud_upload_outlined),
                 onPressed: () => DriveUploader.uploadWithConsent(
                   context, pdf: doc.pdfBytes,
-                  title: doc.title, date: doc.date)),
+                  title: doc.title, date: doc.date,
+                  category: doc.category)),
               IconButton(
                 tooltip: 'Usuń z archiwum',
                 icon: const Icon(Icons.delete_outline),
