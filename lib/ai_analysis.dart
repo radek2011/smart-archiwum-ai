@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
 class AiSuggestion {
-  const AiSuggestion(this.title, this.category, this.date, this.summary);
-  final String title, category, date, summary;
+  const AiSuggestion(this.title, this.category, this.date, this.summary, this.extractedText);
+  final String title, category, date, summary, extractedText;
 }
 
 class AiAnalysis {
@@ -107,6 +107,7 @@ class AiAnalysis {
         (parsed['category'] ?? 'Inne').toString(),
         (parsed['date'] ?? '').toString(),
         (parsed['summary'] ?? '').toString(),
+        (parsed['extractedText'] ?? '').toString(),
       );
       final confirmed = await showDialog<bool>(
         context: context,
@@ -122,6 +123,8 @@ class AiAnalysis {
                 ? 'nieustalona' : result.date)),
               const SizedBox(height: 10),
               Text('Opis: ' + result.summary),
+              const SizedBox(height: 8),
+              Text('Tekst rozpoznany: ' + result.extractedText.length.toString() + ' znaków'),
               const SizedBox(height: 10),
               const Text('Sprawdź propozycję. AI może popełnić błędy.'),
             ],
