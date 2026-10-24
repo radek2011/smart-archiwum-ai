@@ -184,29 +184,6 @@ class _ArchiveHomeState extends State<ArchiveHome> {
     ),
   );
 
-  Widget _archive() => ListView(
-    padding: const EdgeInsets.all(18),
-    children: [
-      _heading('Archiwum'),
-      const SizedBox(height: 8),
-      const Text('Wersja demonstracyjna: przykładowe dokumenty, bez połączenia z Drive.'),
-      const SizedBox(height: 18),
-      TextField(
-        key: const Key('archiveSearch'),
-        controller: search,
-        onChanged: (v) => setState(() => query = v),
-        decoration: InputDecoration(
-          hintText: 'Wpisz nazwę, datę, kategorię lub fragment tekstu',
-          prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16))),
-      ),
-      const SizedBox(height: 18),
-      for (final item in examples.where((x) =>
-          '${x.title} ${x.date} ${x.category} ${x.summary}'
-              .toLowerCase().contains(query.toLowerCase()))) _documentTile(item),
-    ],
-  );
-
   Widget _settings() => _subPage('Ustawienia', Icons.settings_outlined, [
     const ListTile(leading: Icon(Icons.cloud_outlined), title: Text('Google Drive'),
       subtitle: Text('Niepołączony')),
