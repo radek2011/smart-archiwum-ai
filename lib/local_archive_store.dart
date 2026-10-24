@@ -11,12 +11,15 @@ class LocalArchiveRecord {
     required this.category,
     required this.date,
     required this.createdAt,
-    required this.pdfBase64,
+    this.pdfBase64 = '',
+    this.driveFileId = '',
     this.summary = '',
     this.extractedText = '',
   });
 
-  final String id, title, category, date, createdAt, pdfBase64;
+  final String id, title, category, date, createdAt, pdfBase64, driveFileId;
+  bool get hasLegacyLocalPdf => pdfBase64.isNotEmpty;
+  bool get hasDrivePdf => driveFileId.isNotEmpty;
   final String summary, extractedText;
   Uint8List get pdfBytes => base64Decode(pdfBase64);
   int get size => (pdfBase64.length * 3 / 4).round();
@@ -29,6 +32,7 @@ class LocalArchiveRecord {
         date: (data['date'] ?? '').toString(),
         createdAt: (data['createdAt'] ?? '').toString(),
         pdfBase64: (data['pdfBase64'] ?? '').toString(),
+        driveFileId: (data['driveFileId'] ?? '').toString(),
         summary: (data['summary'] ?? '').toString(),
         extractedText: (data['extractedText'] ?? '').toString(),
       );
@@ -39,7 +43,8 @@ class LocalArchiveRecord {
     'category': category,
     'date': date,
     'createdAt': createdAt,
-    'pdfBase64': pdfBase64,
+    if (pdfBase64.isNotEmpty) 'pdfBase64': pdfBase64,
+    'driveFileId': driveFileId,
     'summary': summary,
     'extractedText': extractedText,
   };
