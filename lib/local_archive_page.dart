@@ -71,6 +71,46 @@ class LocalArchivePageState extends State<LocalArchivePage> {
     }
   }
 
+  Widget _matchingExcerpt(LocalArchiveRecord doc) {
+    final term = query.trim();
+    if (term.isEmpty) {
+      return doc.summary.isEmpty ? const SizedBox.shrink()
+          : Text(doc.summary, maxLines: 2, overflow: TextOverflow.ellipsis);
+    }
+    final sources = [doc.extractedText, doc.summary, doc.title, doc.category];
+    String source = '';
+    int at = -1;
+    for (final candidate in sources) {
+      at = candidate.toLowerCase().indexOf(term.toLowerCase());
+      if (at >= 0) {
+        source = candidate;
+        break;
+      }
+    }
+    if (at < 0) return const SizedBox.shrink();
+    final begin = at > 72 ? at - 72 : 0;
+    final end = at + term.length + 95 < source.length
+        ? at + term.length + 95 : source.length;
+    final segment = source.substring(begin, end)
+        .replaceAll(RegExp(r'\\s+'), ' ');
+    final inSegment = segment.toLowerCase().indexOf(term.toLowerCase());
+    if (inSegment < 0) return Text(segment);
+    return Text.rich(TextSpan(children: [
+      TextSpan(text: begin > 0 ? '…' : ''),
+      TextSpan(text: segment.substring(0, inSegment)),
+      TextSpan(
+        text: segment.substring(inSegment, inSegment + term.length),
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          backgroundColor: Color(0xFFFFE4AA),
+          color: Colors.black87,
+        ),
+      ),
+      TextSpan(text: segment.substring(inSegment + term.length)),
+      TextSpan(text: end < source.length ? '…' : ''),
+    ]), maxLines: 4, overflow: TextOverflow.ellipsis);
+  }
+
   @override
   Widget build(BuildContext context) {
     final found = documents.where((doc) =>
@@ -123,8 +163,16 @@ class LocalArchivePageState extends State<LocalArchivePage> {
             leading: const Icon(Icons.picture_as_pdf,
               color: Color(0xFFF36B21)),
             title: Text(doc.title),
-            subtitle: Text(doc.category + ' • ' + doc.date + ' • ' +
-              (doc.size / 1048576).toStringAsFixed(2) + ' MB' + (doc.extractedText.isNotEmpty ? ' • OCR' : ' • bez OCR')),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(doc.category + ' • ' + doc.date + ' • ' +
+                  (doc.size / 1048576).toStringAsFixed(2) + ' MB' +
+                  (doc.extractedText.isNotEmpty ? ' • OCR' : ' • bez OCR')),
+                const SizedBox(height: 5),
+                _matchingExcerpt(doc),
+              ],
+            ),
             onTap: () => openPdf(doc),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               IconButton(
