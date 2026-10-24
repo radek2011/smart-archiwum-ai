@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:idb_shim/idb.dart';
-import 'package:idb_shim/idb_browser.dart';
 
 /// Local browser archive. Data stays in IndexedDB for this site/browser.
 /// Browser data removal, private mode, or storage eviction can delete it.
@@ -45,6 +44,9 @@ class LocalArchiveStore {
 
   static Future<Database> _open() async {
     final factory = getIdbFactory();
+    if (factory == null) {
+      throw StateError('IndexedDB nie jest dostępne w tej przeglądarce.');
+    }
     return factory.open(
       _dbName,
       version: 1,
