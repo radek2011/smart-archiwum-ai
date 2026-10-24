@@ -147,10 +147,14 @@ class _ArchiveHomeState extends State<ArchiveHome> {
           child: const Text('Zobacz wszystkie', style: TextStyle(color: orange))),
       ]),
       const SizedBox(height: 8),
-      const Text('Ostatnie dokumenty poniżej są demonstracyjne. Prawdziwe zapisy znajdziesz w Archiwum.',
+      const Text('PDF-y przechowujemy na Google Drive. '
+        'Nazwy i tekst do wyszukiwania pozostają w lokalnym indeksie.',
         style: TextStyle(fontSize: 12, color: Color(0xFF81899B))),
       const SizedBox(height: 8),
-      for (final item in examples) _documentTile(item),
+      OutlinedButton.icon(
+        onPressed: () => setState(() => selected = 2),
+        icon: const Icon(Icons.folder_open_outlined),
+        label: const Text('Otwórz indeks archiwum')),
     ],
   );
 
@@ -186,7 +190,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
 
   Widget _settings() => _subPage('Ustawienia', Icons.settings_outlined, [
     const ListTile(leading: Icon(Icons.cloud_outlined), title: Text('Google Drive'),
-      subtitle: Text('Niepołączony')),
+      subtitle: Text('Ręczny zapis PDF do Smart Archiwum AI na Drive')),
     const ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('Gemini AI'),
       subtitle: Text('Analiza testowa przez Cloudflare dostępna w skanerze')),
     const ListTile(leading: Icon(Icons.lock_outline), title: Text('Bezpieczeństwo'),
