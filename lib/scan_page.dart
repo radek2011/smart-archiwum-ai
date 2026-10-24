@@ -357,71 +357,63 @@ class _ScanPageState extends State<ScanPage> {
     return Uint8List.fromList(await doc.save());
   }
 
-  Future<LocalArchiveRecord?> saveToArchive({bool withDrive = false}) async {
-    if (busy || pages.isEmpty) return null;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(withDrive ? 'Zapis lokalny i Google Drive' : 'Zapis lokalny'),
-        content: Text(withDrive
-          ? 'Najpierw zapiszemy PDF lokalnie, potem poprosimy o zgodę '
-            'Google na przesłanie go do folderu Smart Archiwum AI / '
-            'wybrana kategoria. Jeśli przesyłanie się nie powiedzie, '
-            'lokalny PDF pozostanie zapisany.'
-          : 'Dokument będzie zapisany tylko w pamięci tej przeglądarki. '
-            'Zachowaj osobną kopię PDF na wypadek usunięcia danych przeglądarki.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(withDrive ? 'Zapisz i połącz Google' : 'Zapisz lokalnie')),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return null;
-    setState(() { busy = true; progress = 'Zapisywanie PDF lokalnie…'; });
+  Future<void> saveAndUpload() async {
+    if (busy || pages.isEmpty) return;
+    final date = DateTime.tryParse(dateController.text)
+        ?.toIso8601String().substring(0, 10)
+        ?? (scannedAt ?? DateTime.now()).toIso8601String().substring(0, 10);
+    final title = titleController.text.trim().isEmpty
+        ? 'Skan dokumentu' : titleController.text.trim();
+    setState(() { busy = true; progress = 'Przygotowanie PDF do Google Drive…'; });
     try {
       final pdf = await buildDocumentPdf();
-      final now = DateTime.now();
-      final date = DateTime.tryParse(dateController.text)
-          ?.toIso8601String().substring(0, 10)
-          ?? now.toIso8601String().substring(0, 10);
-      final record = LocalArchiveRecord(
-        id: now.microsecondsSinceEpoch.toString(),
-        title: titleController.text.trim().isEmpty
-          ? 'Skan dokumentu' : titleController.text.trim(),
-        category: category,
+      if (!mounted) return;
+      final fileId = await DriveUploader.uploadWithConsent(
+        context,
+        pdf: pdf,
+        title: title,
         date: date,
-        createdAt: now.toUtc().toIso8601String(),
-        pdfBase64: base64Encode(pdf),
-        summary: aiSummary,
-        extractedText: aiExtractedText,
+        category: category,
       );
-      await LocalArchiveStore.save(record);
-      if (!mounted) return record;
-      widget.onSaved?.call();
-      message(withDrive
-        ? 'PDF zapisano lokalnie. Teraz potwierdź przesłanie do Google.'
-        : 'PDF zapisany lokalnie. Zachowaj także osobną kopię.');
-      return record;
-    } catch (e) {
-      if (mounted) message('Nie udało się zapisać lokalnie: ' + e.toString());
-      return null;
+      if (!mounted || fileId == null) {
+        if (mounted) message('Nie zapisano na Drive. Skany nadal są w aplikacji; spróbuj ponownie.');
+        return;
+      }
+      final now = DateTime.now();
+      try {
+        await LocalArchiveStore.save(LocalArchiveRecord(
+          id: now.microsecondsSinceEpoch.toString(),
+          title: title,
+          category: category,
+          date: date,
+          createdAt: now.toUtc().toIso8601String(),
+          driveFileId: fileId,
+          summary: aiSummary,
+          extractedText: aiExtractedText,
+        ));
+        if (mounted) widget.onSaved?.call();
+      } catch (_) {
+        if (mounted) message('PDF jest na Drive, ale zapis lokalnego indeksu nie powiódł się.');
+      }
+      if (!mounted) return;
+      setState(() {
+        pages.clear();
+        selected = 0;
+        scannedAt = null;
+        dateManuallySelected = false;
+        titleController.clear();
+        dateController.text = DateTime.now().toIso8601String().substring(0, 10);
+        category = 'Inne';
+        aiSummary = '';
+        aiExtractedText = '';
+      });
+      message('Zapisano na Drive. Zdjęcia i PDF zwolniono z pamięci aplikacji.');
+    } catch (error) {
+      if (mounted) message('Błąd zapisu: ' + error.toString() +
+          '. Skany pozostają do ponownej próby.');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
-  }
-
-  Future<void> saveAndUpload() async {
-    final saved = await saveToArchive(withDrive: true);
-    if (saved == null || !mounted) return;
-    await DriveUploader.uploadWithConsent(
-      context,
-      pdf: saved.pdfBytes,
-      title: saved.title,
-      date: saved.date,
-      category: saved.category,
-    );
   }
 
   Future<void> exportPdf() async {
@@ -650,31 +642,15 @@ class _ScanPageState extends State<ScanPage> {
           onPressed: busy ? null : saveAndUpload,
           style: FilledButton.styleFrom(backgroundColor: orange,
             padding: const EdgeInsets.symmetric(vertical: 16)),
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Zapisz lokalnie i na Google Drive')),
-        TextButton.icon(
-          onPressed: busy ? null : () => saveToArchive(),
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('Tylko zapis lokalny')),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          key: const Key('exportPdfButton'),
-          onPressed: busy ? null : exportPdf,
-          style: FilledButton.styleFrom(backgroundColor: navy,
-            padding: const EdgeInsets.symmetric(vertical: 16)),
-          icon: const Icon(Icons.picture_as_pdf_outlined),
-          label: const Text('Utwórz i zapisz PDF')),
+          icon: const Icon(Icons.cloud_upload_outlined),
+          label: const Text('Zapisz na Google Drive')),
         const SizedBox(height: 10),
-        const Text('Wersja 1.0: ostrożne kadrowanie na kontrastowym tle; '
-          'bez automatycznej korekcji perspektywy. '
-          'Zawsze sprawdź podgląd przed zatwierdzeniem. '
-          'Niezapisane skany są tylko w pamięci. '
-          'Odświeżenie lub zamknięcie strony usuwa je. '
-          'Zapisz wyeksportowany PDF na telefonie. '
-          'Analiza Gemini wymaga osobnego serwera i Twojej zgody na wysłanie stron. '
-          'Lokalne archiwum działa tylko na tym urządzeniu i w tej przeglądarce. '
-          'Google Drive obsługuje ręczne przesyłanie z Archiwum. '
-          'Wyszukiwanie treści wymaga analizy Gemini i zaktualizowanego Workera.',
+        const Text('Dokument PDF trafia tylko do Google Drive / Smart Archiwum AI / '
+          'wybrana kategoria. Po potwierdzonym zapisie skany są usuwane '
+          'z pamięci aplikacji. W telefonie nie tworzymy osobnego pliku PDF. '
+          'Przy błędzie wysyłania zdjęcia pozostają do ponownej próby. '
+          'Archiwum lokalne przechowuje jedynie indeks i link, ale starsze '
+          'zapisane dokumenty lokalne nie są automatycznie usuwane.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
