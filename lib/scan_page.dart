@@ -32,6 +32,8 @@ class _ScanPageState extends State<ScanPage> {
   final TextEditingController titleController = TextEditingController();
   final TextEditingController dateController = TextEditingController(
     text: DateTime.now().toIso8601String().substring(0, 10));
+  DateTime? scannedAt;
+  bool dateManuallySelected = false;
   String category = 'Inne';
   String aiSummary = '';
   String aiExtractedText = '';
@@ -61,6 +63,7 @@ class _ScanPageState extends State<ScanPage> {
       context: context, initialDate: initial,
       firstDate: DateTime(1990), lastDate: DateTime(2100));
     if (chosen != null && mounted) {
+      dateManuallySelected = true;
       setState(() => dateController.text =
           chosen.toIso8601String().substring(0, 10));
     }
@@ -122,7 +125,16 @@ class _ScanPageState extends State<ScanPage> {
         try {
           final page = await optimize(photos[i]);
           if (!mounted) return;
-          setState(() { pages.add(page); selected = pages.length - 1; });
+          setState(() {
+            if (pages.isEmpty) {
+              scannedAt = DateTime.now();
+              if (!dateManuallySelected) {
+                dateController.text = scannedAt!.toIso8601String().substring(0, 10);
+              }
+            }
+            pages.add(page);
+            selected = pages.length - 1;
+          });
         } catch (_) {
           errors++;
         }
@@ -153,11 +165,17 @@ class _ScanPageState extends State<ScanPage> {
             0, result.title.trim().length > 80 ? 80 : result.title.trim().length);
         }
         if (categories.contains(result.category)) category = result.category;
-        if (DateTime.tryParse(result.date) != null) {
-          dateController.text = result.date;
+        final detectedDate = DateTime.tryParse(result.date);
+        if (detectedDate != null) {
+          dateController.text = detectedDate.toIso8601String().substring(0, 10);
+        } else if (!dateManuallySelected) {
+          dateController.text = (scannedAt ?? DateTime.now())
+              .toIso8601String().substring(0, 10);
         }
       });
-      message('Dane AI zastosowane — możesz je edytować przed zapisem PDF.');
+      message(result.date.isEmpty
+        ? 'Nie znaleziono daty dokumentu — przyjęto datę skanowania. Możesz ją zmienić.'
+        : 'Dane AI zastosowane — możesz je edytować przed zapisem PDF.');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
