@@ -34,23 +34,8 @@ class _ArchiveHomeState extends State<ArchiveHome> {
   final archiveKey = GlobalKey<LocalArchivePageState>();
   String query = '';
   final search = TextEditingController();
-  static const examples = [
-    ArchiveDocument('Umowa najmu', 'Umowy', '12.04.2025',
-        'Przykładowy dokument umowy najmu – dane demonstracyjne.'),
-    ArchiveDocument('Faktura 2025/04/123', 'Faktury', '10.04.2025',
-        'Przykładowa faktura – dane demonstracyjne.'),
-    ArchiveDocument('Notatka ze spotkania', 'Notatki', '08.04.2025',
-        'Przykładowe podsumowanie spotkania – dane demonstracyjne.'),
-  ];
-
   @override
   void dispose() { search.dispose(); super.dispose(); }
-
-  void showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('$feature: dostępne po podłączeniu usług w kolejnej wersji.'),
-    ));
-  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -172,22 +157,6 @@ class _ArchiveHomeState extends State<ArchiveHome> {
     ),
   );
 
-  Widget _documentTile(ArchiveDocument doc) => Card(
-    color: Colors.white, margin: const EdgeInsets.only(bottom: 10),
-    elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-    child: ListTile(
-      contentPadding: const EdgeInsets.all(12),
-      leading: CircleAvatar(backgroundColor: const Color(0xFFFFEFE8),
-        child: Icon(Icons.picture_as_pdf_outlined, color: orange)),
-      title: Text(doc.title, style: const TextStyle(color: navy, fontWeight: FontWeight.w700)),
-      subtitle: Text('${doc.category} • ${doc.date}\n${doc.summary}'),
-      isThreeLine: true,
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => showComingSoon('Podgląd PDF'),
-    ),
-  );
-
   Widget _settings() => _subPage('Ustawienia', Icons.settings_outlined, [
     const ListTile(leading: Icon(Icons.cloud_outlined), title: Text('Google Drive'),
       subtitle: Text('Ręczny zapis PDF do Smart Archiwum AI na Drive')),
@@ -209,11 +178,6 @@ class _ArchiveHomeState extends State<ArchiveHome> {
       ]),
     ),
   );
-}
-
-class ArchiveDocument {
-  const ArchiveDocument(this.title, this.category, this.date, this.summary);
-  final String title, category, date, summary;
 }
 
 // Vector approximation for the UI prototype; will be replaced with the
