@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -5,13 +6,15 @@ import 'package:http/http.dart' as http;
 import 'drive_auth.dart';
 
 class DriveUploader {
-  static Future<void> uploadWithConsent(BuildContext context, {
+  static String _clientIdThisSession = '';
+  static Future<String?> uploadWithConsent(BuildContext context, {
     required Uint8List pdf,
     required String title,
     required String date,
     required String category,
   }) async {
-    final clientController = TextEditingController();
+    final clientController = TextEditingController(text: _clientIdThisSession);
+    final completion = Completer<String?>();
     try {
       await showDialog<void>(
         context: context,
@@ -56,9 +59,13 @@ class DriveUploader {
                 }
                 // Authorization runs in the direct user-click stack so
                 // mobile browsers can open Google consent.
+                _clientIdThisSession = id;
                 final authorization = authorizeDrive(id);
                 Navigator.pop(dialogContext);
-                _finishUpload(context, authorization, pdf, title, date, category);
+                _finishUpload(context, authorization, pdf, title, date, category)
+                    .then((fileId) {
+                      if (!completion.isCompleted) completion.complete(fileId);
+                    });
               },
             ),
           ],
@@ -67,9 +74,11 @@ class DriveUploader {
     } finally {
       clientController.dispose();
     }
+    if (!completion.isCompleted) completion.complete(null);
+    return completion.future;
   }
 
-  static Future<void> _finishUpload(
+  static Future<String?> _finishUpload(
     BuildContext context,
     Future<String> authorization,
     Uint8List pdf,
@@ -86,15 +95,16 @@ class DriveUploader {
         final categoryName = _allowedCategory(category);
         final categoryId = await _findOrCreateFolder(
           client, token, categoryName, rootId);
-        await _uploadPdf(client, token, pdf, title, date, categoryId);
+        final fileId = await _uploadPdf(client, token, pdf, title, date, categoryId);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('PDF zapisany w Google Drive: Smart Archiwum AI / ' +
+              _allowedCategory(category)),
+            duration: const Duration(seconds: 8)));
+        }
+        return fileId;
       } finally {
         client.close();
-      }
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('PDF zapisany w Google Drive: Smart Archiwum AI / ' +
-            _allowedCategory(category)),
-          duration: const Duration(seconds: 8)));
       }
     } catch (error) {
       if (context.mounted) {
@@ -170,7 +180,7 @@ class DriveUploader {
     return data['id'] as String;
   }
 
-  static Future<void> _uploadPdf(
+  static Future<String> _uploadPdf(
     http.Client client, String token, Uint8List pdf,
     String title, String date, String categoryId,
   ) async {
@@ -205,5 +215,10 @@ class DriveUploader {
           response.statusCode.toString() + '. ' +
           'Sprawdź uprawnienia OAuth oraz włączenie Drive API.');
       }
+      final parsed = jsonDecode(response.body);
+      if (parsed is! Map || parsed['id'] is! String) {
+        throw const FormatException('Google Drive nie zwrócił ID przesłanego pliku');
+      }
+      return parsed['id'] as String;
     }
 }
