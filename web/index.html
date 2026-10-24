@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Smart Archiwum AI – RentSide">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Archiwum AI</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    // A Google OAuth client ID is public. Access tokens are held in memory only.
+    // Request authorization as a direct response to a user click.
+    window.smartDriveAuthorize = function(clientId) {
+      return new Promise(function(resolve, reject) {
+        if (!window.google || !google.accounts || !google.accounts.oauth2) {
+          reject(new Error('Google Identity Services niedostępne. Odśwież stronę.'));
+          return;
+        }
+        try {
+          const client = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            callback: function(response) {
+              if (response.error || !response.access_token) {
+                reject(new Error(response.error || 'Google nie zwrócił tokenu'));
+              } else {
+                resolve(response.access_token);
+              }
+            },
+            error_callback: function(error) {
+              reject(new Error(error.type || 'Anulowano logowanie'));
+            }
+          });
+          client.requestAccessToken({ prompt: 'consent' });
+        } catch (error) { reject(error); }
+      });
+    };
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
