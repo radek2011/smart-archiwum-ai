@@ -1,4 +1,5 @@
 import 'scan_page.dart';
+import 'local_archive_page.dart';
 import 'package:flutter/material.dart';
 
 void main() => runApp(const SmartArchiveApp());
@@ -30,6 +31,7 @@ class ArchiveHome extends StatefulWidget {
 
 class _ArchiveHomeState extends State<ArchiveHome> {
   int selected = 0;
+  final archiveKey = GlobalKey<LocalArchivePageState>();
   String query = '';
   final search = TextEditingController();
   static const examples = [
@@ -56,8 +58,8 @@ class _ArchiveHomeState extends State<ArchiveHome> {
       child: Column(children: [
         Expanded(child: IndexedStack(index: selected, children: [
           _home(),
-          const ScanPage(),
-          _archive(),
+          ScanPage(onSaved: () => archiveKey.currentState?.reload()),
+          LocalArchivePage(key: archiveKey),
           _settings(),
         ])),
       ]),
@@ -65,7 +67,10 @@ class _ArchiveHomeState extends State<ArchiveHome> {
     bottomNavigationBar: NavigationBar(
       selectedIndex: selected,
       indicatorColor: orange.withValues(alpha: .14),
-      onDestinationSelected: (i) => setState(() => selected = i),
+      onDestinationSelected: (i) {
+        setState(() => selected = i);
+        if (i == 2) archiveKey.currentState?.reload();
+      },
       destinations: const [
         NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: orange), label: 'Start'),
         NavigationDestination(icon: Icon(Icons.document_scanner_outlined), label: 'Skanuj'),
@@ -142,7 +147,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
           child: const Text('Zobacz wszystkie', style: TextStyle(color: orange))),
       ]),
       const SizedBox(height: 8),
-      const Text('Dane demonstracyjne • archiwum nie jest jeszcze połączone',
+      const Text('Ostatnie dokumenty poniżej są demonstracyjne. Prawdziwe zapisy znajdziesz w Archiwum.',
         style: TextStyle(fontSize: 12, color: Color(0xFF81899B))),
       const SizedBox(height: 8),
       for (final item in examples) _documentTile(item),
@@ -206,7 +211,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
     const ListTile(leading: Icon(Icons.cloud_outlined), title: Text('Google Drive'),
       subtitle: Text('Niepołączony')),
     const ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('Gemini AI'),
-      subtitle: Text('Integracja jeszcze nieaktywna')),
+      subtitle: Text('Analiza testowa przez Cloudflare dostępna w skanerze')),
     const ListTile(leading: Icon(Icons.lock_outline), title: Text('Bezpieczeństwo'),
       subtitle: Text('Klucze API nie są umieszczane w aplikacji')),
   ]);
