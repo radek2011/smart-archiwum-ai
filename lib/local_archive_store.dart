@@ -12,9 +12,12 @@ class LocalArchiveRecord {
     required this.date,
     required this.createdAt,
     required this.pdfBase64,
+    this.summary = '',
+    this.extractedText = '',
   });
 
   final String id, title, category, date, createdAt, pdfBase64;
+  final String summary, extractedText;
   Uint8List get pdfBytes => base64Decode(pdfBase64);
   int get size => (pdfBase64.length * 3 / 4).round();
 
@@ -26,6 +29,8 @@ class LocalArchiveRecord {
         date: (data['date'] ?? '').toString(),
         createdAt: (data['createdAt'] ?? '').toString(),
         pdfBase64: (data['pdfBase64'] ?? '').toString(),
+        summary: (data['summary'] ?? '').toString(),
+        extractedText: (data['extractedText'] ?? '').toString(),
       );
 
   Map<String, Object?> toMap() => {
@@ -35,6 +40,8 @@ class LocalArchiveRecord {
     'date': date,
     'createdAt': createdAt,
     'pdfBase64': pdfBase64,
+    'summary': summary,
+    'extractedText': extractedText,
   };
 }
 
