@@ -211,7 +211,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
         if (!busy && error == null && found.isEmpty)
           const Padding(padding: EdgeInsets.all(30),
             child: Center(child: Text('Brak zapisanych dokumentów. '
-              'W zakładce Skanuj wybierz Zapisz w archiwum.'))),
+              'W zakładce Skanuj wybierz Zapisz na Google Drive.'))),
         for (final doc in found)
           Card(child: ListTile(
             leading: const Icon(Icons.picture_as_pdf,
@@ -221,7 +221,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(doc.category + ' • ' + doc.date + ' • ' +
-                  (doc.size / 1048576).toStringAsFixed(2) + ' MB' +
+                  (doc.hasDrivePdf ? 'Google Drive' : 'Starszy PDF lokalny') +
                   (doc.extractedText.isNotEmpty ? ' • OCR' : ' • bez OCR')),
                 const SizedBox(height: 5),
                 _matchingExcerpt(doc),
