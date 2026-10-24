@@ -11,6 +11,11 @@
   <script>
     // A Google OAuth client ID is public. Access tokens are held in memory only.
     // Request authorization as a direct response to a user click.
+    window.smartDriveOpenFile = function(fileId) {
+      if (/^[a-zA-Z0-9_-]+$/.test(fileId)) {
+        window.open('https://drive.google.com/file/d/' + fileId + '/view', '_blank', 'noopener,noreferrer');
+      }
+    };
     window.smartDriveAuthorize = function(clientId) {
       return new Promise(function(resolve, reject) {
         if (!window.google || !google.accounts || !google.accounts.oauth2) {
