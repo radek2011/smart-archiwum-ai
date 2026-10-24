@@ -9,6 +9,7 @@ class DriveUploader {
     required Uint8List pdf,
     required String title,
     required String date,
+    required String category,
   }) async {
     final clientController = TextEditingController();
     try {
@@ -21,7 +22,7 @@ class DriveUploader {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Po zalogowaniu Google dokument PDF zostanie '
-                'przesłany do folderu Mój dysk wybranego konta. '
+                'przesłany do Smart Archiwum AI / wybrana kategoria. '
                 'Ta wersja nie synchronizuje jeszcze archiwum.'),
               const SizedBox(height: 12),
               TextField(
@@ -57,7 +58,7 @@ class DriveUploader {
                 // mobile browsers can open Google consent.
                 final authorization = authorizeDrive(id);
                 Navigator.pop(dialogContext);
-                _finishUpload(context, authorization, pdf, title, date);
+                _finishUpload(context, authorization, pdf, title, date, category);
               },
             ),
           ],
@@ -74,9 +75,105 @@ class DriveUploader {
     Uint8List pdf,
     String title,
     String date,
+    String category,
   ) async {
     try {
       final token = await authorization;
+      final client = http.Client();
+      try {
+        final rootId = await _findOrCreateFolder(
+          client, token, 'Smart Archiwum AI', 'root');
+        final categoryName = _allowedCategory(category);
+        final categoryId = await _findOrCreateFolder(
+          client, token, categoryName, rootId);
+        await _uploadPdf(client, token, pdf, title, date, categoryId);
+      } finally {
+        client.close();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('PDF zapisany w Google Drive: Smart Archiwum AI / ' +
+            _allowedCategory(category)),
+          duration: const Duration(seconds: 8)));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Nie udało się wysłać PDF: ' + error.toString()),
+          duration: const Duration(seconds: 12)));
+      }
+    }
+  }
+
+  static String _allowedCategory(String value) {
+    const categories = [
+      'Umowy', 'Faktury', 'Korespondencja', 'Notatki',
+      'Dokumenty firmowe', 'Inne',
+    ];
+    return categories.contains(value) ? value : 'Inne';
+  }
+
+  // drive.file scope permits access to folders created by this app.
+  // Query parent+name to avoid mixing files across categories.
+  static Future<String> _findOrCreateFolder(
+    http.Client client, String token, String folderName, String parentId,
+  ) async {
+    final escapedName = folderName
+        .replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+    final query = "name = '$escapedName' and " +
+      "mimeType = 'application/vnd.google-apps.folder' and " +
+      "'$parentId' in parents and trashed = false";
+    final listUri = Uri.https('www.googleapis.com', '/drive/v3/files', {
+      'q': query,
+      'spaces': 'drive',
+      'fields': 'nextPageToken,files(id,name,parents)',
+      'pageSize': '100',
+    });
+    final response = await client.get(listUri,
+      headers: {'Authorization': 'Bearer $token'}).timeout(
+        const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception('Wyszukiwanie folderów: Google Drive HTTP ' +
+        response.statusCode.toString());
+    }
+    final result = jsonDecode(response.body);
+    if (result is! Map<String, dynamic>) {
+      throw const FormatException('Niepoprawna odpowiedź Google Drive');
+    }
+    final files = result['files'];
+    if (files is List && files.isNotEmpty) {
+      final first = files.first;
+      if (first is Map && first['id'] is String) {
+        return first['id'] as String;
+      }
+    }
+    final created = await client.post(
+      Uri.parse('https://www.googleapis.com/drive/v3/files?fields=id'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: jsonEncode({
+        'name': folderName,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parentId],
+      }),
+    ).timeout(const Duration(seconds: 30));
+    if (created.statusCode != 200 && created.statusCode != 201) {
+      throw Exception('Tworzenie folderu: Google Drive HTTP ' +
+        created.statusCode.toString());
+    }
+    final data = jsonDecode(created.body);
+    if (data is! Map || data['id'] is! String) {
+      throw const FormatException('Google nie zwrócił ID folderu');
+    }
+    return data['id'] as String;
+  }
+
+  static Future<void> _uploadPdf(
+    http.Client client, String token, Uint8List pdf,
+    String title, String date, String categoryId,
+  ) async {
       final safeTitle = title.trim().isEmpty ? 'Dokument' : title.trim();
       final fileName = date + '_' +
         safeTitle.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_') + '.pdf';
@@ -86,6 +183,7 @@ class DriveUploader {
         'name': fileName,
         'mimeType': 'application/pdf',
         'description': 'Smart Archiwum AI - dokument użytkownika',
+        'parents': [categoryId],
       });
       final header = utf8.encode('--' + boundary +
           '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
@@ -99,32 +197,13 @@ class DriveUploader {
       req.headers['Authorization'] = 'Bearer ' + token;
       req.headers['Content-Type'] = 'multipart/related; boundary=' + boundary;
       req.bodyBytes = body;
-      final client = http.Client();
-      late http.Response response;
-      try {
-        final streamed = await client.send(req).timeout(
-          const Duration(seconds: 60));
-        response = await http.Response.fromStream(streamed);
-      } finally {
-        client.close();
-      }
+      final streamed = await client.send(req).timeout(
+        const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw Exception('Google Drive HTTP ' +
           response.statusCode.toString() + '. ' +
           'Sprawdź uprawnienia OAuth oraz włączenie Drive API.');
       }
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('PDF zapisany na Dysku Google. '
-            'Sprawdź folder Mój dysk.'),
-          duration: Duration(seconds: 8)));
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Nie udało się wysłać PDF: ' + error.toString()),
-          duration: const Duration(seconds: 12)));
-      }
     }
-  }
 }
