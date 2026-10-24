@@ -33,6 +33,8 @@ class _ScanPageState extends State<ScanPage> {
   final TextEditingController dateController = TextEditingController(
     text: DateTime.now().toIso8601String().substring(0, 10));
   String category = 'Inne';
+  String aiSummary = '';
+  String aiExtractedText = '';
   static const categories = <String>[
     'Umowy', 'Faktury', 'Korespondencja', 'Notatki',
     'Dokumenty firmowe', 'Inne',
@@ -95,6 +97,8 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<void> addPhotos(bool camera) async {
     if (busy) return;
+    aiSummary = '';
+    aiExtractedText = '';
     setState(() { busy = true; progress = 'Wybieranie zdjęcia…'; });
     try {
       final List<XFile> photos;
@@ -142,6 +146,8 @@ class _ScanPageState extends State<ScanPage> {
         context, pages.map((p) => p.displayed).toList());
       if (!mounted || result == null) return;
       setState(() {
+        aiSummary = result.summary;
+        aiExtractedText = result.extractedText;
         if (result.title.trim().isNotEmpty) {
           titleController.text = result.title.trim().substring(
             0, result.title.trim().length > 80 ? 80 : result.title.trim().length);
@@ -161,6 +167,8 @@ class _ScanPageState extends State<ScanPage> {
       .showSnackBar(SnackBar(content: Text(text)));
 
   void move(int offset) {
+    aiExtractedText = '';
+    aiSummary = '';
     final next = selected + offset;
     if (next < 0 || next >= pages.length) return;
     setState(() {
@@ -171,6 +179,8 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   void remove() {
+    aiExtractedText = '';
+    aiSummary = '';
     setState(() {
       pages.removeAt(selected);
       if (selected >= pages.length) {
@@ -228,6 +238,8 @@ class _ScanPageState extends State<ScanPage> {
       );
       if (!mounted) return;
       if (apply == true && pages.contains(originalPage)) {
+        aiExtractedText = '';
+        aiSummary = '';
         setState(() => originalPage.corrected = result);
         message('Korekta zastosowana. Oryginał pozostał do przywrócenia.');
       }
@@ -275,6 +287,8 @@ class _ScanPageState extends State<ScanPage> {
     );
     if (!mounted) return;
     if (apply == true && pages.contains(selectedPage)) {
+      aiExtractedText = '';
+      aiSummary = '';
       setState(() => selectedPage.corrected = corrected);
       message('Kadrowanie zastosowane. Możesz przywrócić oryginał.');
     }
@@ -282,6 +296,8 @@ class _ScanPageState extends State<ScanPage> {
 
   void restoreOriginal() {
     if (pages.isEmpty || busy) return;
+    aiExtractedText = '';
+    aiSummary = '';
     setState(() => pages[selected].corrected = null);
     message('Przywrócono oryginalny skan.');
   }
@@ -295,6 +311,8 @@ class _ScanPageState extends State<ScanPage> {
     }
     final rotated = img.copyRotate(original, angle: 90);
     final data = Uint8List.fromList(img.encodeJpg(rotated, quality: 88));
+    aiExtractedText = '';
+    aiSummary = '';
     setState(() => pages[selected] =
         _PagePhoto(data, rotated.width, rotated.height));
   }
@@ -353,6 +371,8 @@ class _ScanPageState extends State<ScanPage> {
         date: date,
         createdAt: now.toUtc().toIso8601String(),
         pdfBase64: base64Encode(pdf),
+        summary: aiSummary,
+        extractedText: aiExtractedText,
       );
       await LocalArchiveStore.save(record);
       if (!mounted) return;
@@ -602,7 +622,7 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.7: ostrożne kadrowanie na kontrastowym tle; '
+        const Text('Wersja 1.0: ostrożne kadrowanie na kontrastowym tle; '
           'bez automatycznej korekcji perspektywy. '
           'Zawsze sprawdź podgląd przed zatwierdzeniem. '
           'Niezapisane skany są tylko w pamięci. '
@@ -610,7 +630,8 @@ class _ScanPageState extends State<ScanPage> {
           'Zapisz wyeksportowany PDF na telefonie. '
           'Analiza Gemini wymaga osobnego serwera i Twojej zgody na wysłanie stron. '
           'Lokalne archiwum działa tylko na tym urządzeniu i w tej przeglądarce. '
-          'Google Drive nie jest jeszcze połączony.',
+          'Google Drive obsługuje ręczne przesyłanie z Archiwum. '
+          'Wyszukiwanie treści wymaga analizy Gemini i zaktualizowanego Workera.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
