@@ -1,7 +1,9 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'document_processor.dart';
 import 'manual_crop_page.dart';
 import 'ai_analysis.dart';
+import 'local_archive_store.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -10,7 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 class ScanPage extends StatefulWidget {
-  const ScanPage({super.key});
+  const ScanPage({super.key, this.onSaved});
+  final VoidCallback? onSaved;
   @override
   State<ScanPage> createState() => _ScanPageState();
 }
@@ -296,6 +299,72 @@ class _ScanPageState extends State<ScanPage> {
         _PagePhoto(data, rotated.width, rotated.height));
   }
 
+  Future<Uint8List> buildDocumentPdf() async {
+    final documentTitle = titleController.text.trim().isEmpty
+      ? 'Skan dokumentu' : titleController.text.trim();
+    final doc = pw.Document(
+      compress: true,
+      title: documentTitle,
+      author: 'Smart Archiwum AI - RentSide',
+      subject: category,
+    );
+    for (final page in pages) {
+      final photo = pw.MemoryImage(page.displayed);
+      doc.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(16),
+        build: (context) => pw.Center(
+          child: pw.Image(photo, fit: pw.BoxFit.contain)),
+      ));
+    }
+    return Uint8List.fromList(await doc.save());
+  }
+
+  Future<void> saveToArchive() async {
+    if (busy || pages.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Zapis lokalny'),
+        content: const Text('Dokument zostanie zapisany w pamięci tej '
+          'przeglądarki, nie w chmurze. Może zniknąć po usunięciu danych '
+          'przeglądarki. Zachowaj również osobną kopię PDF.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Zapisz lokalnie')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    setState(() { busy = true; progress = 'Zapisywanie PDF w archiwum…'; });
+    try {
+      final pdf = await buildDocumentPdf();
+      final now = DateTime.now();
+      final date = DateTime.tryParse(dateController.text)
+          ?.toIso8601String().substring(0, 10)
+          ?? now.toIso8601String().substring(0, 10);
+      final record = LocalArchiveRecord(
+        id: now.microsecondsSinceEpoch.toString(),
+        title: titleController.text.trim().isEmpty
+          ? 'Skan dokumentu' : titleController.text.trim(),
+        category: category,
+        date: date,
+        createdAt: now.toUtc().toIso8601String(),
+        pdfBase64: base64Encode(pdf),
+      );
+      await LocalArchiveStore.save(record);
+      if (!mounted) return;
+      widget.onSaved?.call();
+      message('Zapisano w lokalnym archiwum. Zachowaj też kopię PDF.');
+    } catch (e) {
+      if (mounted) message('Nie udało się zapisać lokalnie: ' + e.toString());
+    } finally {
+      if (mounted) setState(() { busy = false; progress = ''; });
+    }
+  }
+
   Future<void> exportPdf() async {
     if (busy || pages.isEmpty) return;
     setState(() { busy = true; progress = 'Tworzenie pliku PDF…'; });
@@ -518,6 +587,14 @@ class _ScanPageState extends State<ScanPage> {
           label: const Text('Analizuj dokument z Gemini (test)')),
         const SizedBox(height: 12),
         FilledButton.icon(
+          key: const Key('saveArchiveButton'),
+          onPressed: busy ? null : saveToArchive,
+          style: FilledButton.styleFrom(backgroundColor: orange,
+            padding: const EdgeInsets.symmetric(vertical: 16)),
+          icon: const Icon(Icons.folder_open),
+          label: const Text('Zapisz w archiwum (lokalnie)')),
+        const SizedBox(height: 12),
+        FilledButton.icon(
           key: const Key('exportPdfButton'),
           onPressed: busy ? null : exportPdf,
           style: FilledButton.styleFrom(backgroundColor: navy,
@@ -525,14 +602,15 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Utwórz i zapisz PDF')),
         const SizedBox(height: 10),
-        const Text('Wersja 0.6: ostrożne kadrowanie na kontrastowym tle; '
+        const Text('Wersja 0.7: ostrożne kadrowanie na kontrastowym tle; '
           'bez automatycznej korekcji perspektywy. '
           'Zawsze sprawdź podgląd przed zatwierdzeniem. '
-          'Skany są tylko w pamięci. '
+          'Niezapisane skany są tylko w pamięci. '
           'Odświeżenie lub zamknięcie strony usuwa je. '
           'Zapisz wyeksportowany PDF na telefonie. '
           'Analiza Gemini wymaga osobnego serwera i Twojej zgody na wysłanie stron. '
-          'Trwałe archiwum i Google Drive nie są jeszcze dostępne.',
+          'Lokalne archiwum działa tylko na tym urządzeniu i w tej przeglądarce. '
+          'Google Drive nie jest jeszcze połączony.',
           style: TextStyle(color: Colors.redAccent, fontSize: 12)),
       ],
     ]);
