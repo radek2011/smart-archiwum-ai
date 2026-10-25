@@ -15,6 +15,41 @@ class LocalArchivePageState extends State<LocalArchivePage> {
   bool busy = true;
   String? error;
   String query = '';
+  final searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  static String _normalize(String value) {
+    const accents = 'ąćęłńóśźżĄĆĘŁŃÓŚŹŻ';
+    const plain = 'acelnoszzACELNOSZZ';
+    final buffer = StringBuffer();
+    for (final rune in value.runes) {
+      final char = String.fromCharCode(rune);
+      final index = accents.indexOf(char);
+      buffer.write(index < 0 ? char.toLowerCase() : plain[index].toLowerCase());
+    }
+    return buffer.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static List<String> _terms(String value) =>
+      _normalize(value).split(' ').where((term) => term.isNotEmpty).toList();
+
+  bool _matches(LocalArchiveRecord doc) {
+    final content = _normalize([
+      doc.title, doc.category, doc.date, doc.summary, doc.extractedText,
+    ].join(' '));
+    return _terms(query).every(content.contains);
+  }
+
+  void setSearchQuery(String value) {
+    if (!mounted) return;
+    searchController.text = value;
+    setState(() => query = value);
+  }
 
   @override
   void initState() {
@@ -125,6 +160,7 @@ class LocalArchivePageState extends State<LocalArchivePage> {
 
   Widget _matchingExcerpt(LocalArchiveRecord doc) {
     final term = query.trim();
+    final words = _terms(term);
     if (term.isEmpty) {
       return doc.summary.isEmpty ? const SizedBox.shrink()
           : Text(doc.summary, maxLines: 2, overflow: TextOverflow.ellipsis);
@@ -134,6 +170,9 @@ class LocalArchivePageState extends State<LocalArchivePage> {
     int at = -1;
     for (final candidate in sources) {
       at = candidate.toLowerCase().indexOf(term.toLowerCase());
+      if (at < 0 && words.isNotEmpty) {
+        at = _normalize(candidate).indexOf(words.first);
+      }
       if (at >= 0) {
         source = candidate;
         break;
@@ -145,29 +184,29 @@ class LocalArchivePageState extends State<LocalArchivePage> {
         ? at + term.length + 95 : source.length;
     final segment = source.substring(begin, end)
         .replaceAll(RegExp(r'\\s+'), ' ');
-    final inSegment = segment.toLowerCase().indexOf(term.toLowerCase());
+    final highlighted = segment.toLowerCase().contains(term.toLowerCase())
+        ? term : (words.isNotEmpty ? words.first : term);
+    final inSegment = segment.toLowerCase().indexOf(highlighted);
     if (inSegment < 0) return Text(segment);
     return Text.rich(TextSpan(children: [
       TextSpan(text: begin > 0 ? '…' : ''),
       TextSpan(text: segment.substring(0, inSegment)),
       TextSpan(
-        text: segment.substring(inSegment, inSegment + term.length),
+        text: segment.substring(inSegment, inSegment + highlighted.length),
         style: const TextStyle(
           fontWeight: FontWeight.bold,
           backgroundColor: Color(0xFFFFE4AA),
           color: Colors.black87,
         ),
       ),
-      TextSpan(text: segment.substring(inSegment + term.length)),
+      TextSpan(text: segment.substring(inSegment + highlighted.length)),
       TextSpan(text: end < source.length ? '…' : ''),
     ]), maxLines: 4, overflow: TextOverflow.ellipsis);
   }
 
   @override
   Widget build(BuildContext context) {
-    final found = documents.where((doc) =>
-      (doc.title + ' ' + doc.category + ' ' + doc.date + ' ' + doc.summary + ' ' + doc.extractedText)
-          .toLowerCase().contains(query.toLowerCase())).toList();
+    final found = documents.where(_matches).toList();
     return ListView(
       key: const Key('localArchivePage'),
       padding: const EdgeInsets.all(18),
@@ -192,7 +231,9 @@ class LocalArchivePageState extends State<LocalArchivePage> {
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
             labelText: 'Szukaj po nazwie, opisie lub treści',
+            hintText: 'np. faktura energia październik',
             border: OutlineInputBorder()),
+          controller: searchController,
           onChanged: (text) => setState(() => query = text),
         ),
         const SizedBox(height: 12),

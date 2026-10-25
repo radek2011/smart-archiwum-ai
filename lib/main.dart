@@ -115,7 +115,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
             borderRadius: BorderRadius.circular(18),
             borderSide: const BorderSide(color: Color(0xFFE1E5EE))),
         ),
-        onSubmitted: (v) => setState(() {query = v; search.text = v; selected = 2;}),
+        onSubmitted: (v) { archiveKey.currentState?.setSearchQuery(v); setState(() {query = v; search.text = v; selected = 2;}); },
       ),
       const SizedBox(height: 22),
       Row(children: [
@@ -144,7 +144,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
   );
 
   Widget _category(String title, IconData icon, Color background) => InkWell(
-    onTap: () => setState(() {query = title; search.text = title; selected = 2;}),
+    onTap: () { archiveKey.currentState?.setSearchQuery(title); setState(() {query = title; search.text = title; selected = 2;}); },
     borderRadius: BorderRadius.circular(16),
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 5),
