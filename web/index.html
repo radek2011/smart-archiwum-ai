@@ -37,7 +37,8 @@
               reject(new Error(error.type || 'Anulowano logowanie'));
             }
           });
-          client.requestAccessToken({ prompt: 'consent' });
+          // Google will ask for consent when necessary, without forcing it every upload.
+          client.requestAccessToken({ prompt: '' });
         } catch (error) { reject(error); }
       });
     };
