@@ -37,7 +37,7 @@
               reject(new Error(error.type || 'Anulowano logowanie'));
             }
           });
-          client.requestAccessToken({ prompt: 'consent' });
+          client.requestAccessToken({ prompt: '' });
         } catch (error) { reject(error); }
       });
     };
