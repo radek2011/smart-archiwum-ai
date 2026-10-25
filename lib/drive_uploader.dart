@@ -9,6 +9,11 @@ import 'drive_index_sync.dart';
 class DriveUploader {
   static String _clientIdThisSession = '';
   static String _tokenThisSession = '';
+  static DateTime? _tokenIssuedAt;
+
+  static bool get _hasFreshToken => _tokenThisSession.isNotEmpty &&
+      _tokenIssuedAt != null &&
+      DateTime.now().difference(_tokenIssuedAt!).inMinutes < 45;
 
   static Future<void> syncIndexAfterSave() async {
     if (_tokenThisSession.isEmpty) throw StateError('Brak sesji Google Drive');
@@ -20,6 +25,12 @@ class DriveUploader {
     required String date,
     required String category,
   }) async {
+    // The first successful Google authorization covers subsequent documents
+    // in this short-lived session; no repeated dialog while token is fresh.
+    if (_hasFreshToken) {
+      return _finishUpload(context, Future.value(_tokenThisSession),
+          pdf, title, date, category);
+    }
     final clientController = TextEditingController(text: _clientIdThisSession);
     final completion = Completer<String?>();
     var initiated = false;
@@ -98,6 +109,7 @@ class DriveUploader {
     try {
       final token = await authorization;
       _tokenThisSession = token;
+      _tokenIssuedAt = DateTime.now();
       final client = http.Client();
       try {
         final rootId = await _findOrCreateFolder(
