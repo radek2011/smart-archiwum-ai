@@ -3,6 +3,7 @@ import 'package:printing/printing.dart';
 import 'local_archive_store.dart';
 import 'drive_uploader.dart';
 import 'drive_open.dart';
+import 'drive_index_sync.dart';
 
 class LocalArchivePage extends StatefulWidget {
   const LocalArchivePage({super.key});
@@ -67,6 +68,24 @@ class LocalArchivePageState extends State<LocalArchivePage> {
           'Nie udało się otworzyć lokalnego archiwum w tej przeglądarce.');
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> syncIndex() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      final restored = await DriveIndexSync.syncWithConsent(context);
+      if (!mounted) return;
+      if (restored != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Indeks zsynchronizowany. Przywrócono $restored wpisów.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Błąd synchronizacji: $e')));
+    } finally {
+      await reload();
     }
   }
 
@@ -219,12 +238,15 @@ class LocalArchivePageState extends State<LocalArchivePage> {
           'Tutaj zostaje lokalny indeks nazw, kategorii i tekstu OCR. '
           'Starsze lokalne PDF-y możesz pojedynczo przenieść na Drive.'),
         const SizedBox(height: 12),
-        const Text('Wyczyszczenie przeglądarki usunie lokalny indeks '
+        const Text('Bez synchronizacji wyczyszczenie przeglądarki usunie lokalny indeks '
           'wyszukiwania, nie PDF-y już przesłane na Drive. '
-          'Indeks nie synchronizuje się jeszcze między urządzeniami. '
+          'Użyj przycisku Synchronizuj, aby wykonać kopię indeksu na Drive. '
           'Starsze lokalne PDF-y pozostają na urządzeniu do ręcznego przeniesienia.',
 
           style: TextStyle(color: Colors.deepOrange, fontSize: 12)),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: busy ? null : syncIndex,
+          icon: const Icon(Icons.sync), label: const Text('Synchronizuj indeks z Google Drive')),
         const SizedBox(height: 14),
         TextField(
           key: const Key('localArchiveSearch'),
