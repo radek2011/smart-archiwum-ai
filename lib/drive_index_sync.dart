@@ -52,6 +52,18 @@ class DriveIndexSync {
     }
   }
 
+  /// Reuse the short-lived authorization granted for the PDF upload.
+  /// The token is never written to disk.
+  static Future<int> syncWithToken(String token) async {
+    if (token.isEmpty) throw StateError('Brak ważnej sesji Google Drive');
+    final client = http.Client();
+    try {
+      return await _sync(client, token);
+    } finally {
+      client.close();
+    }
+  }
+
   static Future<int> _sync(http.Client client, String token) async {
     final headers = {'Authorization': 'Bearer $token'};
     final q = "name = '$_fileName' and trashed = false and "
