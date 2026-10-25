@@ -453,6 +453,12 @@ class _ScanPageState extends State<ScanPage> {
           extractedText: aiExtractedText,
         ));
         if (mounted) widget.onSaved?.call();
+        try {
+          await DriveUploader.syncIndexAfterSave();
+        } catch (_) {
+          if (mounted) message('PDF zapisany. Indeks Drive nie jest aktualny. '
+            'W Archiwum wybierz Synchronizuj indeks.');
+        }
       } catch (_) {
         if (mounted) message('PDF jest na Drive, ale zapis lokalnego indeksu nie powiódł się.');
       }

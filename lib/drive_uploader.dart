@@ -4,9 +4,16 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'drive_auth.dart';
+import 'drive_index_sync.dart';
 
 class DriveUploader {
   static String _clientIdThisSession = '';
+  static String _tokenThisSession = '';
+
+  static Future<void> syncIndexAfterSave() async {
+    if (_tokenThisSession.isEmpty) throw StateError('Brak sesji Google Drive');
+    await DriveIndexSync.syncWithToken(_tokenThisSession);
+  }
   static Future<String?> uploadWithConsent(BuildContext context, {
     required Uint8List pdf,
     required String title,
@@ -90,6 +97,7 @@ class DriveUploader {
   ) async {
     try {
       final token = await authorization;
+      _tokenThisSession = token;
       final client = http.Client();
       try {
         final rootId = await _findOrCreateFolder(
