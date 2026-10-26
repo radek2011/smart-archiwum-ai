@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'session_store.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -12,9 +13,12 @@ class AiSuggestion {
 class AiAnalysis {
   // In-memory only; disappears when the page reloads or tab is closed.
   static const serverUrl = 'https://smart-archiwum-ai.radek-f53.workers.dev';
-  static String _sessionToken = '';
+  static String _sessionToken = readSessionValue('smart_ai_token') ?? '';
   static bool get configured => _sessionToken.isNotEmpty;
-  static void clearSessionToken() => _sessionToken = '';
+  static void clearSessionToken() {
+    _sessionToken = '';
+    removeSessionValue('smart_ai_token');
+  }
 
   static Future<AiSuggestion?> run(
     BuildContext context, List<Uint8List> pages) async {
@@ -67,6 +71,7 @@ class AiAnalysis {
           return null;
         }
         _sessionToken = entered;
+        writeSessionValue('smart_ai_token', entered);
       } finally {
         input.dispose();
       }
