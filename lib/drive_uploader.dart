@@ -4,12 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'drive_auth.dart';
+import 'session_store.dart';
 import 'drive_index_sync.dart';
 
 class DriveUploader {
-  static String _clientIdThisSession = '';
-  static String _tokenThisSession = '';
-  static DateTime? _tokenIssuedAt;
+  static String _clientIdThisSession = readSessionValue('smart_google_client_id') ?? '';
+  static String _tokenThisSession = readSessionValue('smart_google_access_token') ?? '';
+  static DateTime? _tokenIssuedAt = DateTime.tryParse(readSessionValue('smart_google_issued_at') ?? '');
 
   static bool get _hasFreshToken => _tokenThisSession.isNotEmpty &&
       _tokenIssuedAt != null &&
@@ -28,8 +29,10 @@ class DriveUploader {
     // The first successful Google authorization covers subsequent documents
     // in this short-lived session; no repeated dialog while token is fresh.
     if (_hasFreshToken) {
-      return _finishUpload(context, Future.value(_tokenThisSession),
+      final reused = await _finishUpload(context, Future.value(_tokenThisSession),
           pdf, title, date, category);
+      if (reused != null) return reused;
+      if (!context.mounted) return null;
     }
     final clientController = TextEditingController(text: _clientIdThisSession);
     final completion = Completer<String?>();
@@ -80,6 +83,7 @@ class DriveUploader {
                 // mobile browsers can open Google consent.
                 initiated = true;
                 _clientIdThisSession = id;
+                writeSessionValue('smart_google_client_id', id);
                 final authorization = authorizeDrive(id);
                 Navigator.pop(dialogContext);
                 _finishUpload(context, authorization, pdf, title, date, category)
@@ -110,6 +114,8 @@ class DriveUploader {
       final token = await authorization;
       _tokenThisSession = token;
       _tokenIssuedAt = DateTime.now();
+      writeSessionValue('smart_google_access_token', token);
+      writeSessionValue('smart_google_issued_at', _tokenIssuedAt!.toIso8601String());
       final client = http.Client();
       try {
         final rootId = await _findOrCreateFolder(
