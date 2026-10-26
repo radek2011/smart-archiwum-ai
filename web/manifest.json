@@ -1,0 +1,22 @@
+
+{
+  "name": "Smart Archiwum AI",
+  "short_name": "Smart Archiwum",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#061638",
+  "theme_color": "#061638",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
