@@ -327,6 +327,27 @@ class _ScanPageState extends State<ScanPage> {
         _PagePhoto(data, rotated.width, rotated.height));
   }
 
+  // Split OCR content into independently layoutable blocks while preserving
+  // the original text, whitespace and reading order.
+  List<String> _pdfTextChunks(String text, {int maxChars = 350}) {
+    final chunks = <String>[];
+    var start = 0;
+    while (start < text.length) {
+      var end = start + maxChars;
+      if (end >= text.length) {
+        chunks.add(text.substring(start));
+        break;
+      }
+      final boundary = text.lastIndexOf(' ', end);
+      final newline = text.lastIndexOf('\\n', end);
+      final splitAt = boundary > newline ? boundary : newline;
+      if (splitAt > start + (maxChars ~/ 2)) end = splitAt + 1;
+      chunks.add(text.substring(start, end));
+      start = end;
+    }
+    return chunks;
+  }
+
   Future<Uint8List> buildDocumentPdf() async {
     final documentTitle = titleController.text.trim().isEmpty
         ? 'Skan dokumentu' : titleController.text.trim();
@@ -389,7 +410,14 @@ class _ScanPageState extends State<ScanPage> {
           style: pw.TextStyle(font: regular, fontSize: 9,
             color: PdfColors.grey700)),
         pw.SizedBox(height: 14),
-        pw.Text(aiExtractedText.trim(), style: bodyStyle),
+        // Keep each text widget small enough for MultiPage to paginate.
+        // A single enormous pw.Text can exceed the printable A4 height.
+        ..._pdfTextChunks(aiExtractedText.trim()).map(
+          (chunk) => pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 5),
+            child: pw.Text(chunk, style: bodyStyle),
+          ),
+        ),
       ],
     ));
 
