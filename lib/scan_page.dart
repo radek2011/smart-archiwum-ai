@@ -458,7 +458,7 @@ class _ScanPageState extends State<ScanPage> {
     try {
       final pdf = await buildDocumentPdf();
       if (!mounted) return;
-      setState(() => progress = 'Wysyłanie PDF na Google Drive…';
+      setState(() => progress = 'Wysyłanie PDF na Google Drive…');
       final fileId = await DriveUploader.uploadWithConsent(
         context,
         pdf: pdf,
