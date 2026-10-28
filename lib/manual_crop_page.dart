@@ -15,7 +15,6 @@ class _ManualCropPageState extends State<ManualCropPage> {
   Rect crop = const Rect.fromLTRB(.06, .06, .94, .94);
   bool working = false;
   int? _draggedCorner;
-  Offset? _lastDragPosition;
   String? error;
   static const accent = Color(0xFFF36B21);
   Size? _imageSize;
@@ -40,7 +39,6 @@ class _ManualCropPageState extends State<ManualCropPage> {
     );
     if (start) {
       _draggedCorner = null;
-      _lastDragPosition = pos;
       // Obszar dotykowy narożników: 36 pikseli, niezależnie od rozmiaru zdjęcia.
       var minDistance = 36.0 * 36.0;
       final handles = corners;
@@ -82,7 +80,6 @@ class _ManualCropPageState extends State<ManualCropPage> {
             pos.dy.clamp(crop.top + minSide, 1.0));
       }
     });
-    _lastDragPosition = pos;
   }
 
   Future<void> _apply() async {
@@ -147,10 +144,7 @@ class _ManualCropPageState extends State<ManualCropPage> {
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
           OutlinedButton(
             onPressed: working ? null : () => setState(() {
-              corners = [
-                const Offset(.06,.06), const Offset(.94,.06),
-                const Offset(.94,.94), const Offset(.06,.94),
-              ];
+              crop = const Rect.fromLTRB(.06, .06, .94, .94);
             }), child: const Text('Resetuj')),
           const SizedBox(width: 10),
           Expanded(child: FilledButton.icon(
