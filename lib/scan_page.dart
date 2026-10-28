@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'document_processor.dart';
 import 'manual_crop_page.dart';
@@ -457,6 +458,7 @@ class _ScanPageState extends State<ScanPage> {
     try {
       final pdf = await buildDocumentPdf();
       if (!mounted) return;
+      setState(() => progress = 'Wysyłanie PDF na Google Drive…';
       final fileId = await DriveUploader.uploadWithConsent(
         context,
         pdf: pdf,
@@ -468,6 +470,7 @@ class _ScanPageState extends State<ScanPage> {
         if (mounted) message('Nie zapisano na Drive. Skany nadal są w aplikacji; spróbuj ponownie.');
         return;
       }
+      if (mounted) setState(() => progress = 'PDF przesłany. Zapisywanie indeksu…');
       final now = DateTime.now();
       try {
         await LocalArchiveStore.save(LocalArchiveRecord(
@@ -482,7 +485,7 @@ class _ScanPageState extends State<ScanPage> {
         ));
         if (mounted) widget.onSaved?.call();
         try {
-          await DriveUploader.syncIndexAfterSave();
+          await DriveUploader.syncIndexAfterSave().timeout(const Duration(seconds: 35));
         } catch (_) {
           if (mounted) message('PDF zapisany. Indeks Drive nie jest aktualny. '
             'W Archiwum wybierz Synchronizuj indeks.');
