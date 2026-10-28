@@ -11,13 +11,11 @@ class ManualCropPage extends StatefulWidget {
 }
 
 class _ManualCropPageState extends State<ManualCropPage> {
-  // TL, TR, BR, BL normalized to displayed image.
-  List<Offset> corners = [
-    const Offset(.06, .06), const Offset(.94, .06),
-    const Offset(.94, .94), const Offset(.06, .94),
-  ];
+  // Prostokąt kadrowania w układzie współrzędnych 0..1.
+  Rect crop = const Rect.fromLTRB(.06, .06, .94, .94);
   bool working = false;
   int? _draggedCorner;
+  Offset? _lastDragPosition;
   String? error;
   static const accent = Color(0xFFF36B21);
   Size? _imageSize;
@@ -26,9 +24,14 @@ class _ManualCropPageState extends State<ManualCropPage> {
   void initState() {
     super.initState();
     final decoded = img.decodeImage(widget.source);
-    if (decoded != null) _imageSize = Size(
-        decoded.width.toDouble(), decoded.height.toDouble());
+    if (decoded != null) {
+      _imageSize = Size(decoded.width.toDouble(), decoded.height.toDouble());
+    }
   }
+
+  List<Offset> get corners => [
+    crop.topLeft, crop.topRight, crop.bottomRight, crop.bottomLeft,
+  ];
 
   void _move(Offset local, Size size, {bool start = false}) {
     final pos = Offset(
@@ -36,17 +39,50 @@ class _ManualCropPageState extends State<ManualCropPage> {
       (local.dy / size.height).clamp(0.0, 1.0),
     );
     if (start) {
-      var nearest = 0;
-      var distance = double.infinity;
-      for (var i = 0; i < corners.length; i++) {
-        final d = (corners[i] - pos).distanceSquared;
-        if (d < distance) { nearest = i; distance = d; }
+      _draggedCorner = null;
+      _lastDragPosition = pos;
+      // Obszar dotykowy narożników: 36 pikseli, niezależnie od rozmiaru zdjęcia.
+      var minDistance = 36.0 * 36.0;
+      final handles = corners;
+      for (var i = 0; i < handles.length; i++) {
+        final dx = (handles[i].dx - pos.dx) * size.width;
+        final dy = (handles[i].dy - pos.dy) * size.height;
+        final distance = dx * dx + dy * dy;
+        if (distance < minDistance) {
+          minDistance = distance;
+          _draggedCorner = i;
+        }
       }
-      if (distance > .045) { _draggedCorner = null; return; }
-      _draggedCorner = nearest;
+      return;
     }
-    if (_draggedCorner == null) return;
-    setState(() => corners[_draggedCorner!] = pos);
+    final handle = _draggedCorner;
+    if (handle == null) return;
+    // Minimalne 8% rozmiaru zdjęcia pozwala zawsze chwycić uchwyty.
+    const minSide = .08;
+    setState(() {
+      switch (handle) {
+        case 0: // lewy górny: lewa + górna krawędź
+          crop = Rect.fromLTRB(
+            pos.dx.clamp(0.0, crop.right - minSide),
+            pos.dy.clamp(0.0, crop.bottom - minSide),
+            crop.right, crop.bottom);
+        case 1: // prawy górny
+          crop = Rect.fromLTRB(
+            crop.left, pos.dy.clamp(0.0, crop.bottom - minSide),
+            pos.dx.clamp(crop.left + minSide, 1.0), crop.bottom);
+        case 2: // prawy dolny
+          crop = Rect.fromLTRB(
+            crop.left, crop.top,
+            pos.dx.clamp(crop.left + minSide, 1.0),
+            pos.dy.clamp(crop.top + minSide, 1.0));
+        case 3: // lewy dolny
+          crop = Rect.fromLTRB(
+            pos.dx.clamp(0.0, crop.right - minSide),
+            crop.top, crop.right,
+            pos.dy.clamp(crop.top + minSide, 1.0));
+      }
+    });
+    _lastDragPosition = pos;
   }
 
   Future<void> _apply() async {
@@ -58,7 +94,7 @@ class _ManualCropPageState extends State<ManualCropPage> {
       if (result == null) {
         setState(() {
           working = false;
-          error = 'Narożniki nachodzą na siebie albo pole jest zbyt małe.';
+          error = 'Zaznacz większy prostokąt kadrowania.';
         });
         return;
       }
@@ -66,7 +102,7 @@ class _ManualCropPageState extends State<ManualCropPage> {
     } catch (_) {
       if (mounted) setState(() {
         working = false;
-        error = 'Nie udało się wyciąć obrazu. Spróbuj zmienić narożniki.';
+        error = 'Nie udało się wyciąć obrazu. Spróbuj zmienić prostokąt.';
       });
     }
   }
