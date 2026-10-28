@@ -72,7 +72,7 @@ class DriveIndexSync {
       'q':q, 'fields':'nextPageToken,files(id,name,modifiedTime)',
       'pageSize':'100',
     });
-    final listing = await client.get(listUri,headers:headers);
+    final listing = await client.get(listUri,headers:headers).timeout(const Duration(seconds: 20));
     if (listing.statusCode != 200) {
       throw StateError('Google Drive HTTP ${listing.statusCode} (odczyt indeksu)');
     }
@@ -88,7 +88,7 @@ class DriveIndexSync {
     if (existingId != null) {
       final response = await client.get(
         Uri.https('www.googleapis.com','/drive/v3/files/$existingId',{'alt':'media'}),
-        headers:headers);
+        headers:headers).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
         throw StateError('Nie udało się pobrać indeksu z Drive.');
       }
@@ -128,11 +128,11 @@ class DriveIndexSync {
           '$payload\r\n--$boundary--';
       response = await client.post(url,headers:{
         ...headers,'Content-Type':'multipart/related; boundary=$boundary',
-      },body:utf8.encode(body));
+      },body:utf8.encode(body)).timeout(const Duration(seconds: 20));
     } else {
       response = await client.patch(url,headers:{
         ...headers,'Content-Type':'application/json; charset=UTF-8',
-      },body:payload);
+      },body:payload).timeout(const Duration(seconds: 20));
     }
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw StateError('Google Drive HTTP ${response.statusCode} (zapis indeksu)');
