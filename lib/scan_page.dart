@@ -477,8 +477,8 @@ class ScanPageState extends State<ScanPage> {
   }
 
   Future<void> saveAndUpload() async {
-    if (busy || pages.isEmpty) return;
-    if (aiExtractedText.trim().isEmpty) {
+    if (busy || (importedPdf == null && pages.isEmpty)) return;
+    if (importedPdf == null && aiExtractedText.trim().isEmpty) {
       message('Najpierw przeanalizuj dokument z Gemini i zatwierdź wynik. '
         'Bez OCR nie można utworzyć pełnego PDF tekstowego.');
       return;
@@ -496,7 +496,7 @@ class ScanPageState extends State<ScanPage> {
         ? 'Skan dokumentu' : titleController.text.trim();
     setState(() { busy = true; progress = 'Przygotowanie PDF do Google Drive…'; });
     try {
-      final pdf = await buildDocumentPdf();
+      final pdf = importedPdf ?? await buildDocumentPdf();
       if (!mounted) return;
       setState(() => progress = 'Wysyłanie PDF na Google Drive…');
       final fileId = await DriveUploader.uploadWithConsent(
@@ -536,6 +536,8 @@ class ScanPageState extends State<ScanPage> {
       if (!mounted) return;
       setState(() {
         pages.clear();
+        importedPdf = null;
+        pdfName = '';
         selected = 0;
         scannedAt = null;
         dateManuallySelected = false;
@@ -545,7 +547,7 @@ class ScanPageState extends State<ScanPage> {
         aiSummary = '';
         aiExtractedText = '';
       });
-      message('Zapisano na Drive. Zdjęcia i PDF zwolniono z pamięci aplikacji.');
+      message('Zapisano na Drive. Dokument dodano do archiwum.');
     } catch (error) {
       if (mounted) message('Błąd zapisu: ' + error.toString() +
           '. Dokument pozostaje do ponownej próby.');
@@ -574,8 +576,7 @@ class ScanPageState extends State<ScanPage> {
       const Text('Nowy skan', style: TextStyle(fontSize: 25,
         fontWeight: FontWeight.w800, color: navy)),
       const SizedBox(height: 8),
-      const Text('Fotografuj kolejne strony lub wybierz kilka zdjęć z galerii. '
-        'Każda strona zostanie zoptymalizowana do czytelnego JPEG.'),
+      const Text('Wybierz gotowy PDF, zrób zdjęcie lub dodaj strony z galerii.'),
       const SizedBox(height: 18),
       const Text('Opis dokumentu', style: TextStyle(
         fontSize: 17, fontWeight: FontWeight.bold, color: navy)),
@@ -632,12 +633,30 @@ class ScanPageState extends State<ScanPage> {
           padding: const EdgeInsets.symmetric(vertical: 16)),
         icon: const Icon(Icons.photo_library_outlined, color: orange),
         label: const Text('Dodaj z galerii')),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: busy || pages.isNotEmpty || importedPdf != null ? null : pickPdf,
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('Dodaj PDF')),
       if (busy) ...[
         const SizedBox(height: 16),
         const LinearProgressIndicator(),
         Text(progress, textAlign: TextAlign.center),
       ],
       const SizedBox(height: 22),
+      if (importedPdf != null)
+        ListTile(
+          leading: const Icon(Icons.picture_as_pdf),
+          title: Text(pdfName),
+          subtitle: Text(size(importedPdf!.length)),
+          trailing: IconButton(icon: const Icon(Icons.close), tooltip: 'Usuń wybrany PDF',
+            onPressed: busy ? null : () => setState(() {
+              importedPdf = null;
+              pdfName = '';
+              titleController.clear();
+              scannedAt = null;
+            })))
+      else ...[
       Row(children: [
         Expanded(child: Text('Strony: ' + pages.length.toString(),
           style: const TextStyle(color: navy, fontWeight: FontWeight.bold,
@@ -738,6 +757,9 @@ class ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.auto_awesome),
           label: const Text('Analizuj dokument z Gemini (test)')),
         const SizedBox(height: 12),
+      ],
+      ],
+      if (importedPdf != null || pages.isNotEmpty) ...[
         FilledButton.icon(
           key: const Key('saveArchiveButton'),
           onPressed: busy ? null : saveAndUpload,
@@ -746,7 +768,7 @@ class ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.cloud_upload_outlined),
           label: const Text('Zapisz na Google Drive')),
         const SizedBox(height: 10),
-        const Text('Dokument PDF trafia tylko do Google Drive / Smart Archiwum AI / '
+        if (importedPdf == null) const Text('Dokument PDF trafia tylko do Google Drive / Smart Archiwum AI / '
           'wybrana kategoria. Po potwierdzonym zapisie skany są usuwane '
           'z pamięci aplikacji. W telefonie nie tworzymy osobnego pliku PDF. '
           'Przy błędzie wysyłania zdjęcia pozostają do ponownej próby. '
