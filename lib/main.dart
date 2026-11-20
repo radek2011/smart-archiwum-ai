@@ -31,6 +31,7 @@ class ArchiveHome extends StatefulWidget {
 
 class _ArchiveHomeState extends State<ArchiveHome> {
   int selected = 0;
+  final scanKey = GlobalKey<ScanPageState>();
   final archiveKey = GlobalKey<LocalArchivePageState>();
   String query = '';
   final search = TextEditingController();
@@ -43,7 +44,7 @@ class _ArchiveHomeState extends State<ArchiveHome> {
       child: Column(children: [
         Expanded(child: IndexedStack(index: selected, children: [
           _home(),
-          ScanPage(onSaved: () => archiveKey.currentState?.reload()),
+          ScanPage(key: scanKey, onSaved: () => archiveKey.currentState?.reload()),
           LocalArchivePage(key: archiveKey),
           _settings(),
         ])),
@@ -104,6 +105,15 @@ class _ArchiveHomeState extends State<ArchiveHome> {
           label: const Text('Szukaj'),
         )),
       ]),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('Dodaj PDF'),
+        onPressed: () {
+          setState(() => selected = 1);
+          scanKey.currentState?.pickPdf();
+        },
+      ),
       const SizedBox(height: 22),
       TextField(
         key: const Key('homeSearch'),

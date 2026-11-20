@@ -5,6 +5,7 @@ import 'manual_crop_page.dart';
 import 'ai_analysis.dart';
 import 'local_archive_store.dart';
 import 'drive_uploader.dart';
+import 'package:file_selector/file_selector.dart' as files;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -16,7 +17,7 @@ class ScanPage extends StatefulWidget {
   const ScanPage({super.key, this.onSaved});
   final VoidCallback? onSaved;
   @override
-  State<ScanPage> createState() => _ScanPageState();
+  State<ScanPage> createState() => ScanPageState();
 }
 
 class _PagePhoto {
@@ -28,7 +29,46 @@ class _PagePhoto {
   final int height;
 }
 
-class _ScanPageState extends State<ScanPage> {
+class ScanPageState extends State<ScanPage> {
+  Uint8List? importedPdf;
+  String pdfName = '';
+
+  Future<void> pickPdf() async {
+    if (busy) return;
+    if (pages.isNotEmpty || importedPdf != null) {
+      message('Najpierw zapisz lub usuń otwarty dokument.');
+      return;
+    }
+    setState(() { busy = true; progress = 'Wybieranie PDF…'; });
+    try {
+      const type = files.XTypeGroup(label: 'PDF', extensions: ['pdf'],
+          mimeTypes: ['application/pdf'], uniformTypeIdentifiers: ['com.adobe.pdf']);
+      final file = await files.openFile(acceptedTypeGroups: [type]);
+      if (file == null || !mounted) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      if (bytes.length < 5 || String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+        message('Wybrany plik nie ma nagłówka PDF.');
+        return;
+      }
+      setState(() {
+        importedPdf = bytes;
+        pdfName = file.name;
+        scannedAt = DateTime.now();
+        aiSummary = '';
+        aiExtractedText = '';
+        if (titleController.text.trim().isEmpty) {
+          final name = file.name.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
+          titleController.text = String.fromCharCodes(name.runes.take(80));
+        }
+      });
+    } catch (_) {
+      if (mounted) message('Nie udało się odczytać pliku PDF. Spróbuj ponownie.');
+    } finally {
+      if (mounted) setState(() { busy = false; progress = ''; });
+    }
+  }
+
   final ImagePicker picker = ImagePicker();
   final TextEditingController titleController = TextEditingController();
   final TextEditingController dateController = TextEditingController(
@@ -437,8 +477,8 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   Future<void> saveAndUpload() async {
-    if (busy || pages.isEmpty) return;
-    if (aiExtractedText.trim().isEmpty) {
+    if (busy || (importedPdf == null && pages.isEmpty)) return;
+    if (importedPdf == null && aiExtractedText.trim().isEmpty) {
       message('Najpierw przeanalizuj dokument z Gemini i zatwierdź wynik. '
         'Bez OCR nie można utworzyć pełnego PDF tekstowego.');
       return;
@@ -456,7 +496,7 @@ class _ScanPageState extends State<ScanPage> {
         ? 'Skan dokumentu' : titleController.text.trim();
     setState(() { busy = true; progress = 'Przygotowanie PDF do Google Drive…'; });
     try {
-      final pdf = await buildDocumentPdf();
+      final pdf = importedPdf ?? await buildDocumentPdf();
       if (!mounted) return;
       setState(() => progress = 'Wysyłanie PDF na Google Drive…');
       final fileId = await DriveUploader.uploadWithConsent(
@@ -467,7 +507,7 @@ class _ScanPageState extends State<ScanPage> {
         category: category,
       );
       if (!mounted || fileId == null) {
-        if (mounted) message('Nie zapisano na Drive. Skany nadal są w aplikacji; spróbuj ponownie.');
+        if (mounted) message('Nie zapisano na Drive. Dokument nadal jest w aplikacji; spróbuj ponownie.');
         return;
       }
       if (mounted) setState(() => progress = 'PDF przesłany. Zapisywanie indeksu…');
@@ -496,6 +536,8 @@ class _ScanPageState extends State<ScanPage> {
       if (!mounted) return;
       setState(() {
         pages.clear();
+        importedPdf = null;
+        pdfName = '';
         selected = 0;
         scannedAt = null;
         dateManuallySelected = false;
@@ -505,10 +547,10 @@ class _ScanPageState extends State<ScanPage> {
         aiSummary = '';
         aiExtractedText = '';
       });
-      message('Zapisano na Drive. Zdjęcia i PDF zwolniono z pamięci aplikacji.');
+      message('Zapisano na Drive. Dokument dodano do archiwum.');
     } catch (error) {
       if (mounted) message('Błąd zapisu: ' + error.toString() +
-          '. Skany pozostają do ponownej próby.');
+          '. Dokument pozostaje do ponownej próby.');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
@@ -534,8 +576,7 @@ class _ScanPageState extends State<ScanPage> {
       const Text('Nowy skan', style: TextStyle(fontSize: 25,
         fontWeight: FontWeight.w800, color: navy)),
       const SizedBox(height: 8),
-      const Text('Fotografuj kolejne strony lub wybierz kilka zdjęć z galerii. '
-        'Każda strona zostanie zoptymalizowana do czytelnego JPEG.'),
+      const Text('Wybierz gotowy PDF, zrób zdjęcie lub dodaj strony z galerii.'),
       const SizedBox(height: 18),
       const Text('Opis dokumentu', style: TextStyle(
         fontSize: 17, fontWeight: FontWeight.bold, color: navy)),
@@ -579,7 +620,7 @@ class _ScanPageState extends State<ScanPage> {
       const SizedBox(height: 18),
       FilledButton.icon(
         key: const Key('cameraButton'),
-        onPressed: busy ? null : () => addPhotos(true),
+        onPressed: busy || importedPdf != null ? null : () => addPhotos(true),
         style: FilledButton.styleFrom(backgroundColor: navy,
           padding: const EdgeInsets.symmetric(vertical: 16)),
         icon: const Icon(Icons.camera_alt_outlined),
@@ -587,17 +628,35 @@ class _ScanPageState extends State<ScanPage> {
       const SizedBox(height: 10),
       OutlinedButton.icon(
         key: const Key('galleryButton'),
-        onPressed: busy ? null : () => addPhotos(false),
+        onPressed: busy || importedPdf != null ? null : () => addPhotos(false),
         style: OutlinedButton.styleFrom(foregroundColor: navy,
           padding: const EdgeInsets.symmetric(vertical: 16)),
         icon: const Icon(Icons.photo_library_outlined, color: orange),
         label: const Text('Dodaj z galerii')),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: busy || pages.isNotEmpty || importedPdf != null ? null : pickPdf,
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('Dodaj PDF')),
       if (busy) ...[
         const SizedBox(height: 16),
         const LinearProgressIndicator(),
         Text(progress, textAlign: TextAlign.center),
       ],
       const SizedBox(height: 22),
+      if (importedPdf != null)
+        ListTile(
+          leading: const Icon(Icons.picture_as_pdf),
+          title: Text(pdfName),
+          subtitle: Text(size(importedPdf!.length)),
+          trailing: IconButton(icon: const Icon(Icons.close), tooltip: 'Usuń wybrany PDF',
+            onPressed: busy ? null : () => setState(() {
+              importedPdf = null;
+              pdfName = '';
+              titleController.clear();
+              scannedAt = null;
+            })))
+      else ...[
       Row(children: [
         Expanded(child: Text('Strony: ' + pages.length.toString(),
           style: const TextStyle(color: navy, fontWeight: FontWeight.bold,
@@ -698,6 +757,9 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.auto_awesome),
           label: const Text('Analizuj dokument z Gemini (test)')),
         const SizedBox(height: 12),
+      ],
+      ],
+      if (importedPdf != null || pages.isNotEmpty) ...[
         FilledButton.icon(
           key: const Key('saveArchiveButton'),
           onPressed: busy ? null : saveAndUpload,
@@ -706,7 +768,7 @@ class _ScanPageState extends State<ScanPage> {
           icon: const Icon(Icons.cloud_upload_outlined),
           label: const Text('Zapisz na Google Drive')),
         const SizedBox(height: 10),
-        const Text('Dokument PDF trafia tylko do Google Drive / Smart Archiwum AI / '
+        if (importedPdf == null) const Text('Dokument PDF trafia tylko do Google Drive / Smart Archiwum AI / '
           'wybrana kategoria. Po potwierdzonym zapisie skany są usuwane '
           'z pamięci aplikacji. W telefonie nie tworzymy osobnego pliku PDF. '
           'Przy błędzie wysyłania zdjęcia pozostają do ponownej próby. '
