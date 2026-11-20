@@ -184,11 +184,34 @@ class ScanPageState extends State<ScanPage> {
   }
 
   Future<void> analyzeDocument() async {
-    if (busy || pages.isEmpty) return;
+    final pdf = importedPdf;
+    if (busy || (pdf == null && pages.isEmpty)) return;
     setState(() { busy = true; progress = 'Analiza dokumentu AI…'; });
     try {
-      final result = await AiAnalysis.run(
-        context, pages.map((p) => p.displayed).toList());
+      final images = pages.map((p) => p.displayed).toList();
+      if (pdf != null) {
+        // Some web renderers transfer their input buffer to a worker.
+        // Keep the original PDF available for Drive and retries.
+        final previews = Printing.raster(Uint8List.fromList(pdf), dpi: 120);
+        await for (final preview in previews) {
+          if (!mounted) return;
+          if (images.length == 5) {
+            message('Analiza AI obsługuje dokumenty do 5 stron. '
+                'Możesz zapisać cały PDF na Drive bez analizy.');
+            return;
+          }
+          setState(() => progress = 'Odczytywanie strony ${images.length + 1}…');
+          images.add(await preview.toPng());
+        }
+        if (!mounted) return;
+        if (images.isEmpty) {
+          message('Nie udało się odczytać stron tego PDF-u.');
+          return;
+        }
+        setState(() => progress = 'Analiza dokumentu AI…');
+      }
+      if (!mounted) return;
+      final result = await AiAnalysis.run(context, images);
       if (!mounted || result == null) return;
       setState(() {
         aiSummary = result.summary;
@@ -209,6 +232,9 @@ class ScanPageState extends State<ScanPage> {
       message(result.date.isEmpty
         ? 'Nie znaleziono daty dokumentu — przyjęto datę skanowania. Możesz ją zmienić.'
         : 'Dane AI zastosowane — możesz je edytować przed zapisem PDF.');
+    } catch (_) {
+      if (mounted) message('Nie udało się odczytać dokumentu do analizy. '
+          'Jeśli PDF ma hasło, wybierz odblokowaną kopię.');
     } finally {
       if (mounted) setState(() { busy = false; progress = ''; });
     }
@@ -653,6 +679,11 @@ class ScanPageState extends State<ScanPage> {
             onPressed: busy ? null : () => setState(() {
               importedPdf = null;
               pdfName = '';
+              aiSummary = '';
+              aiExtractedText = '';
+              category = 'Inne';
+              dateManuallySelected = false;
+              dateController.text = DateTime.now().toIso8601String().substring(0, 10);
               titleController.clear();
               scannedAt = null;
             })))
@@ -751,15 +782,15 @@ class ScanPageState extends State<ScanPage> {
             ),
           )),
         const SizedBox(height: 12),
+      ],
+      ],
+      if (importedPdf != null || pages.isNotEmpty) ...[
         OutlinedButton.icon(
           key: const Key('analyzeAiButton'),
           onPressed: busy ? null : analyzeDocument,
           icon: const Icon(Icons.auto_awesome),
           label: const Text('Analizuj dokument z Gemini (test)')),
         const SizedBox(height: 12),
-      ],
-      ],
-      if (importedPdf != null || pages.isNotEmpty) ...[
         FilledButton.icon(
           key: const Key('saveArchiveButton'),
           onPressed: busy ? null : saveAndUpload,
